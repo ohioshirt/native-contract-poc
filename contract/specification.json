@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "states": [
+    "Unauthenticated",
+    "Authenticated",
+    "Refreshing"
+  ],
+  "events": [
+    "LoginSucceeded",
+    "Logout",
+    "TokenExpired",
+    "RefreshSucceeded",
+    "RefreshFailed"
+  ],
+  "effects": [
+    "RequestTokenRefresh",
+    "ClearCredentials"
+  ],
+  "initialState": "Unauthenticated",
+  "unknownInputPolicy": "reject",
+  "processing": "sequential-atomic",
+  "transitions": [
+    {
+      "state": "Unauthenticated",
+      "event": "LoginSucceeded",
+      "nextState": "Authenticated",
+      "effects": []
+    },
+    {
+      "state": "Unauthenticated",
+      "event": "Logout",
+      "nextState": "Unauthenticated",
+      "effects": []
+    },
+    {
+      "state": "Unauthenticated",
+      "event": "TokenExpired",
+      "nextState": "Unauthenticated",
+      "effects": []
+    },
+    {
+      "state": "Unauthenticated",
+      "event": "RefreshSucceeded",
+      "nextState": "Unauthenticated",
+      "effects": []
+    },
+    {
+      "state": "Unauthenticated",
+      "event": "RefreshFailed",
+      "nextState": "Unauthenticated",
+      "effects": []
+    },
+    {
+      "state": "Authenticated",
+      "event": "LoginSucceeded",
+      "nextState": "Authenticated",
+      "effects": []
+    },
+    {
+      "state": "Authenticated",
+      "event": "Logout",
+      "nextState": "Unauthenticated",
+      "effects": [
+        "ClearCredentials"
+      ]
+    },
+    {
+      "state": "Authenticated",
+      "event": "TokenExpired",
+      "nextState": "Refreshing",
+      "effects": [
+        "RequestTokenRefresh"
+      ]
+    },
+    {
+      "state": "Authenticated",
+      "event": "RefreshSucceeded",
+      "nextState": "Authenticated",
+      "effects": []
+    },
+    {
+      "state": "Authenticated",
+      "event": "RefreshFailed",
+      "nextState": "Authenticated",
+      "effects": []
+    },
+    {
+      "state": "Refreshing",
+      "event": "LoginSucceeded",
+      "nextState": "Refreshing",
+      "effects": []
+    },
+    {
+      "state": "Refreshing",
+      "event": "Logout",
+      "nextState": "Refreshing",
+      "effects": []
+    },
+    {
+      "state": "Refreshing",
+      "event": "TokenExpired",
+      "nextState": "Refreshing",
+      "effects": []
+    },
+    {
+      "state": "Refreshing",
+      "event": "RefreshSucceeded",
+      "nextState": "Authenticated",
+      "effects": []
+    },
+    {
+      "state": "Refreshing",
+      "event": "RefreshFailed",
+      "nextState": "Unauthenticated",
+      "effects": [
+        "ClearCredentials"
+      ]
+    }
+  ],
+  "invariants": {
+    "totalTransitionFunction": true,
+    "stateInDeclaredSet": true,
+    "effectsInDeclaredSet": true,
+    "maxEffectsPerStep": 1
+  },
+  "exhaustiveMaxLength": 4
+}

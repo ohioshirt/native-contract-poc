@@ -1,0 +1,9 @@
+ios/.build/
+android/.gradle/
+android/**/build/
+.gradle-home/
+.swift-cache/
+reports/
+verification/__pycache__/
+*.pyc
+.DS_Store
