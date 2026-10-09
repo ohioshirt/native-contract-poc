@@ -39,6 +39,16 @@ python3 -m unittest discover -s verification -p 'test_*.py' -v
 
 `SKIP_MUTATIONS=1 bash scripts/verify.sh` は変更実験用の短いゲートです。この実行だけではMutationの成功を主張できません。Formal gateにskip設定はありません。ビルドキャッシュは`.gradle-home/`、`.swift-cache/`、`.formal-cache/`へ保存し、検証Artifactに混入させません。
 
+Async response correlationは仕様v3の追加profileとして検証します。既存の同期`TraceRunner`はそのまま保ち、Swiftの`AsyncTraceRunner`とKotlinの`async-library` runnerを使います。入力イベントは`{"event":"LoginSucceeded"}`のようなオブジェクトで、refresh応答だけ`requestId`を持ちます。シナリオは任意で正のsigned64 `nextRequestId`を指定でき、指定しない場合は1から始まります。出力は各ステップのstate、pendingRequestId、effect（要求IDを含む）、rejectionを検査し、IDも比較対象にします。AuthenticatedのLogoutは通常どおり処理し、Refreshing中のLogoutは現行仕様どおり無視します。
+
+```sh
+bash scripts/async-verify.sh                 # 7 event variants、長さ0〜5、名前付き境界trace
+bash scripts/async-formal-verify.sh          # 抽象TLA+モデルとstale guard負例
+bash scripts/async-mutation-test.sh          # 非同期ID guard/counter resetの隔離Mutation
+```
+
+Async TLCモデルはpendingの真偽とCURRENT/STALEの関係を有限化します。CURRENTは同じ論理session instanceへ届き、現在のpending IDと一致する応答を表します。ID数値やネイティブ実装の refinement はモデルに含みません。同期APIや応答処理は呼び出し側が直列化します。
+
 例として、Runnerはstdinの`{"scenarios":[{"scenario":"example","events":["LoginSucceeded","TokenExpired"]}]}`を読み、stdoutへ`{"traces":[...]}`を返します。Swift Runnerは`ios/.build/debug/TraceRunner`、Kotlin Runnerは`android/library/build/install/library/bin/library`です。
 
 Schema validatorは付属Schemaで使うJSON Schemaの部分集合を実装し、未知の検証keywordを拒否します。汎用JSON Schemaエンジンではありません。仕様・Schema・検証Traceの重複JSON keyも拒否します。
@@ -94,6 +104,34 @@ Luna単独との追加比較では、同じEffect変更を隔離コピーで実�
 
 形式検証の実測コマンドとログ末尾は[形式モデルの証拠](docs/experiments/formal-model-evidence.md)、[モデル実装報告](docs/agent-reports/formal-model.md)、[AIレビュー](docs/agent-reports/formal-review.md)に記録しています。[モデル境界](formal/README.md)ではTLC状態とセッション状態の違い、stutteringとEffect実行の違いを説明しています。
 
+## 相関管理の受け入れ記録
+
+v3の唯一の振る舞い基準は`contract/specification.json`です。同期tableと既存ネイティブsourceは維持し、追加の`async` profileがguard、pending action、ID範囲、非再利用、上限到達時の無変更rejectionを定義します。v3 SHA-256は`2accb45bb81eb931c2debebb990719e05d49109eec7afec2718c34afdc3aa08f`です。
+
+実測コマンド・ログ末尾は[相関管理の証拠](docs/experiments/async-correlation-evidence.md)、[Swift報告](docs/agent-reports/async-swift.md)、[Kotlin報告](docs/agent-reports/async-kotlin.md)、[検証器報告](docs/agent-reports/async-verification.md)に保存しています。[Native AIレビュー](docs/agent-reports/async-native-review.md)と[検証器AIレビュー](docs/agent-reports/async-verification-review.md)の修正事項は解消しました。
+
+| 検証 | 実測ログの結果 |
+|---|---|
+| 既存同期Contract/Differential | 全781シナリオを維持 |
+| 相関Contract/Differential | 19,621シナリオ / 94,842ステップ。ID payloadを含めて比較 |
+| 既存・相関Mutation | 両行列が期待値に一致。共通誤りはContractで検出 |
+| Core TLC / abstract Async TLC | 完全探索と、それぞれ名前付き不変条件の反例を確認 |
+
+相関fixtureは7イベントvariantの長さ0〜5を全列挙し、長いLogout/Login後の旧応答、重複応答、未発行ID、上限と上限直前、大きな整数の精度境界を加えています。これ以上の長さ・全signed64値に対するプログラムの完全な等価性は証明していません。
+
+| 入力例 | 状態 | pending ID | Effect |
+|---|---|---:|---|
+| LoginSucceeded | Authenticated | なし | なし |
+| TokenExpired | Refreshing | 1 | RequestTokenRefresh(1) |
+| RefreshSucceeded(1) | Authenticated | なし | なし |
+| TokenExpired | Refreshing | 2 | RequestTokenRefresh(2) |
+| 遅れたRefreshSucceeded(1) | Refreshing | 2 | なし |
+| RefreshSucceeded(2) | Authenticated | なし | なし |
+
+IDは一つの論理session history内の番号です。別sessionへ同じ番号が発行されることは許容されます。応答を発行元のhistoryへルーティングすること、同じsessionへの呼び出しを直列化することが前提です。Swiftのsession値をcopy/restoreして古いhistoryへ戻すことは、この前提での同じsession継続とは扱いません。IDは認証証明や秘密情報ではありません。
+
+Refreshing中のLogoutは、当初の明示仕様を維持して無視します。進行中refreshの無効化・キャンセルを今回の保証に含めません。これは先に提示した追加仕様候補への回答待ちの判断点です。実際の通信、資格情報置換、同時呼び出しの線形化可能性、活性は対象外です。Async TLCはCURRENT/STALEとpendingを抽象化し、IDの新鮮性・正しいルーティングを仮定するため、numeric allocatorやnative implementationのrefinement proofではありません。
+
 ## 次のステップ
 
-非同期refreshを追加する場合はrequest/session ID、遅延応答、Logoutとの競合、イベントの順序と公平性を別途仕様化します。SwiftPM/Maven配布前には公開API互換性、実機統合、バージョン管理、署名と依存供給網を検討します。
+SwiftPM/Maven配布前には公開API互換性、実機統合、バージョン管理、署名と依存供給網を検討します。Correlation PoCは資格情報の置換、実際のrequest cancellation、並列呼び出し安全性、任意長の native trace refinement を保証しません。

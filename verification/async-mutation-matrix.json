@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "id": "A-swift-accepts-stale-response",
+      "expected": {"swift": "FAIL", "kotlin": "PASS", "differential": "FAIL"},
+      "patches": [{
+        "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
+        "before": "guard state == .refreshing, pendingRequestId == requestId else {",
+        "after": "guard state == .refreshing else {"
+      }]
+    },
+    {
+      "id": "B-kotlin-resets-counter-on-accepted-logout",
+      "expected": {"swift": "PASS", "kotlin": "FAIL", "differential": "FAIL"},
+      "patches": [{
+        "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
+        "before": "                    // PATCH_SITE_ACCEPTED_LOGOUT_COUNTER_RESET",
+        "after": "                    nextRequestId = 1L // intentional mutation\n                    // PATCH_SITE_ACCEPTED_LOGOUT_COUNTER_RESET"
+      }]
+    },
+    {
+      "id": "C-both-accept-stale-response",
+      "expected": {"swift": "FAIL", "kotlin": "FAIL", "differential": "PASS"},
+      "patches": [
+        {
+          "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
+          "before": "guard state == .refreshing, pendingRequestId == requestId else {",
+          "after": "guard state == .refreshing else {"
+        },
+        {
+          "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
+          "before": "if (isResponse && (state != AsyncState.Refreshing || pendingRequestId != responseId)) {",
+          "after": "if (isResponse && state != AsyncState.Refreshing) {"
+        }
+      ]
+    }
+  ]
+}

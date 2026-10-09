@@ -23,11 +23,40 @@
         "maxEffectsPerStep": {"type": "integer", "minimum": 0}
       }
     },
-    "exhaustiveMaxLength": {"type": "integer", "minimum": 0}
+    "exhaustiveMaxLength": {"type": "integer", "minimum": 0},
+    "async": {"$ref": "#/$defs/asyncProfile"}
   },
   "$defs": {
     "stringArray": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
     "nonEmptyStrings": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+    "asyncProfile": {
+      "type": "object",
+      "required": ["initialState", "initialPendingRequestId", "initialNextRequestId", "requestIdMin", "requestIdMax", "requestIdScope", "reusePolicy", "overflowPolicy", "exhaustionRejection", "logoutWhileRefreshing", "guardMismatch", "transitions", "verification"],
+      "additionalProperties": false,
+      "properties": {
+        "initialState": {"type": "string"}, "initialPendingRequestId": {"const": null},
+        "initialNextRequestId": {"type": "integer", "minimum": 1},
+        "requestIdMin": {"type": "integer", "minimum": 1}, "requestIdMax": {"type": "integer", "minimum": 1},
+        "requestIdScope": {"enum": ["instance"]}, "reusePolicy": {"enum": ["never"]},
+        "overflowPolicy": {"enum": ["reject-before-mutation"]}, "exhaustionRejection": {"type": "string"},
+        "logoutWhileRefreshing": {"enum": ["ignore"]},
+        "guardMismatch": {"enum": ["preserve-state-pending-counter-and-no-effects"]},
+        "transitions": {"type": "array", "items": {"$ref": "#/$defs/asyncTransition"}},
+        "verification": {
+          "type": "object", "required": ["exhaustiveMaxLength", "responseIds"], "additionalProperties": false,
+          "properties": {"exhaustiveMaxLength": {"type": "integer", "minimum": 0}, "responseIds": {"$ref": "#/$defs/nonEmptyIntegers"}}
+        }
+      }
+    },
+    "asyncTransition": {
+      "type": "object", "required": ["state", "event", "nextState", "effects", "guard", "pendingAction"], "additionalProperties": false,
+      "properties": {
+        "state": {"type": "string"}, "event": {"type": "string"}, "nextState": {"type": "string"},
+        "effects": {"$ref": "#/$defs/stringArray"}, "guard": {"enum": ["always", "activeResponse"]},
+        "pendingAction": {"enum": ["preserve", "clear", "allocate"]}
+      }
+    },
+    "nonEmptyIntegers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
     "transition": {
       "type": "object", "required": ["state", "event", "nextState", "effects"], "additionalProperties": false,
       "properties": {"state": {"type": "string"}, "event": {"type": "string"}, "nextState": {"type": "string"}, "effects": {"$ref": "#/$defs/stringArray"}}

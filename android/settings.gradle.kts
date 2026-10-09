@@ -6,4 +6,4 @@ dependencyResolutionManagement {
     repositories { mavenCentral() }
 }
 rootProject.name = "native-contract"
-include(":library")
+include(":library", ":async-library")

@@ -18,7 +18,11 @@ This is finite model checking, not a TLAPS deductive proof. Projection equality 
 
 ## What remains unverified
 
-Native behavior is still checked using its independent contract/differential/mutation gates over the defined finite input set. No theorem about arbitrary Swift/Kotlin programs follows from the TLA+ run. No fairness has been specified, so refresh completion/liveness is not claimed. Concurrent API calls, asynchronous response correlation, credentials, persistence and OS integration are not represented in this model.
+Native behavior is checked using its independent contract/differential/mutation gates over the defined finite input set. No theorem about arbitrary Swift/Kotlin programs follows from the TLA+ run. No fairness has been specified, so refresh completion/liveness is not claimed. Concurrent API calls, credentials, persistence and OS integration are not represented in this model.
+
+## Async correlation abstraction
+
+`AsyncSession.tla` is checked separately from the synchronous `Session.tla` gate by `scripts/async-formal-verify.sh`. Its transition records are generated from the validated v3 `async.transitions` rows. It tracks the session state, a Boolean pending-request flag and predecessor observations. A response may be labelled CURRENT only while a request is pending; under the same-instance routing assumption, CURRENT means the response ID equals that pending ID. STALE represents all other IDs, including duplicate, old, future and foreign-session responses. The model abstracts away numeric IDs, signed64 allocation and native implementation refinement. Allocation may nondeterministically take an atomic exhaustion branch. It checks pending iff Refreshing, row/effect closure, stale no-op safety and rejection atomicity; it makes no liveness claim. The isolated mutant removes the stale response guard and must produce a parsed `StaleResponseSafety` counterexample. See [async verification evidence](../docs/agent-reports/async-verification.md).
 
 ## Commands
 

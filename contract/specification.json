@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "states": [
     "Unauthenticated",
     "Authenticated",
@@ -125,5 +125,155 @@
     "effectsInDeclaredSet": true,
     "maxEffectsPerStep": 1
   },
-  "exhaustiveMaxLength": 4
+  "exhaustiveMaxLength": 4,
+  "async": {
+    "initialState": "Unauthenticated",
+    "initialPendingRequestId": null,
+    "initialNextRequestId": 1,
+    "requestIdMin": 1,
+    "requestIdMax": 9223372036854775807,
+    "requestIdScope": "instance",
+    "reusePolicy": "never",
+    "overflowPolicy": "reject-before-mutation",
+    "exhaustionRejection": "RequestIdExhausted",
+    "logoutWhileRefreshing": "ignore",
+    "guardMismatch": "preserve-state-pending-counter-and-no-effects",
+    "transitions": [
+      {
+        "state": "Unauthenticated",
+        "event": "LoginSucceeded",
+        "nextState": "Authenticated",
+        "effects": [],
+        "guard": "always",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Unauthenticated",
+        "event": "Logout",
+        "nextState": "Unauthenticated",
+        "effects": [],
+        "guard": "always",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Unauthenticated",
+        "event": "TokenExpired",
+        "nextState": "Unauthenticated",
+        "effects": [],
+        "guard": "always",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Unauthenticated",
+        "event": "RefreshSucceeded",
+        "nextState": "Unauthenticated",
+        "effects": [],
+        "guard": "activeResponse",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Unauthenticated",
+        "event": "RefreshFailed",
+        "nextState": "Unauthenticated",
+        "effects": [],
+        "guard": "activeResponse",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Authenticated",
+        "event": "LoginSucceeded",
+        "nextState": "Authenticated",
+        "effects": [
+          "ClearCredentials"
+        ],
+        "guard": "always",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Authenticated",
+        "event": "Logout",
+        "nextState": "Unauthenticated",
+        "effects": [
+          "ClearCredentials"
+        ],
+        "guard": "always",
+        "pendingAction": "clear"
+      },
+      {
+        "state": "Authenticated",
+        "event": "TokenExpired",
+        "nextState": "Refreshing",
+        "effects": [
+          "RequestTokenRefresh"
+        ],
+        "guard": "always",
+        "pendingAction": "allocate"
+      },
+      {
+        "state": "Authenticated",
+        "event": "RefreshSucceeded",
+        "nextState": "Authenticated",
+        "effects": [],
+        "guard": "activeResponse",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Authenticated",
+        "event": "RefreshFailed",
+        "nextState": "Authenticated",
+        "effects": [],
+        "guard": "activeResponse",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Refreshing",
+        "event": "LoginSucceeded",
+        "nextState": "Refreshing",
+        "effects": [],
+        "guard": "always",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Refreshing",
+        "event": "Logout",
+        "nextState": "Refreshing",
+        "effects": [],
+        "guard": "always",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Refreshing",
+        "event": "TokenExpired",
+        "nextState": "Refreshing",
+        "effects": [],
+        "guard": "always",
+        "pendingAction": "preserve"
+      },
+      {
+        "state": "Refreshing",
+        "event": "RefreshSucceeded",
+        "nextState": "Authenticated",
+        "effects": [],
+        "guard": "activeResponse",
+        "pendingAction": "clear"
+      },
+      {
+        "state": "Refreshing",
+        "event": "RefreshFailed",
+        "nextState": "Unauthenticated",
+        "effects": [
+          "ClearCredentials"
+        ],
+        "guard": "activeResponse",
+        "pendingAction": "clear"
+      }
+    ],
+    "verification": {
+      "exhaustiveMaxLength": 5,
+      "responseIds": [
+        1,
+        2
+      ]
+    }
+  }
 }
