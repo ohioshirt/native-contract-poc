@@ -7,3 +7,5 @@ reports/
 verification/__pycache__/
 *.pyc
 .DS_Store
+android/verification-logs/
+docs/experiments/control-location.json
