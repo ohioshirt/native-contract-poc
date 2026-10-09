@@ -18,3 +18,11 @@ Raw command logs are retained under reports/ (gitignored). Evidence documents li
 
 ## Measurement limitations
 This harness exposes model selection and messages but no billable-token/currency usage API. Record elapsed wall time and repair dispatches; do not invent token or monetary costs. One trial per configuration is exploratory and cannot establish model superiority; shared infrastructure and order effects are confounders.
+
+## Correction ledger
+
+`team-review-repairs.tsv` records explicit post-submission review correction waves, not all draft feedback or compilation/environment retries. `phase6-team-repairs.tsv` and `phase6-control-repairs.tsv` record additional bug-repair requests after the first implementation candidate; both are empty. Intentional RED phases demonstrate the new effect requirement and are not implementation repair failures. The first root script trial overlapped a script edit and was abandoned/retried; it is not counted as a native semantic fix. GPG commits and compiler/build execution needed sandbox escalation but required no manual code intervention.
+
+Human intervention was limited to the supplied purpose/specification/constraints and GitHub owner/visibility/destination. User changed initial private repository constraint to public. No human native source comparison or implementation change was requested.
+
+Parent session's exact model ID is not independently exposed; it fulfilled the Sol orchestration role. Workers explicitly selected `gpt-6-luna`, and AI quality reviewers explicitly selected `gpt-6.1-sol`. Model switching of the active parent session was not available. No provider usage/currency metrics were available; monetary cost comparison could not be completed.

@@ -1,0 +1,12 @@
+{
+  "startedUTC": "2026-10-09T04:16:10.458972+00:00",
+  "baselineCommit": "aaee282",
+  "contractSha256": "fe82d03428bcd33b7101aaf24ff717d3bc59035f10ec22c2719147ca9602ec11",
+  "change": "Authenticated \u00d7 LoginSucceeded emits exactly [ClearCredentials] and stays Authenticated",
+  "nativeWorkersDoneUTC": "2026-10-09T04:18:10.867295+00:00",
+  "gateStartedUTC": "2026-10-09T04:18:10.867295+00:00",
+  "gateReportWrittenUTC": "2026-10-09T04:18:16.893957+00:00",
+  "gateElapsedSeconds": 6.026662,
+  "changeToGateReportSeconds": 126.434985,
+  "timingMethod": "UTC start recorded immediately before shell gate; end from report.md final mtime. Includes shell setup; not billable model usage."
+}

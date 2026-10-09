@@ -47,7 +47,7 @@ public struct AuthReducer: Sendable {
              (.unauthenticated, .refreshFailed):
             result = TransitionResult(state: .unauthenticated, effects: [])
         case (.authenticated, .loginSucceeded):
-            result = TransitionResult(state: .authenticated, effects: [])
+            result = TransitionResult(state: .authenticated, effects: [.clearCredentials])
         case (.authenticated, .logout):
             result = TransitionResult(state: .unauthenticated, effects: [.clearCredentials])
         case (.authenticated, .tokenExpired):

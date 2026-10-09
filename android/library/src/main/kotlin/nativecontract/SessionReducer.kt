@@ -18,8 +18,8 @@ class SessionReducer(initialState: SessionState = SessionState.Unauthenticated) 
                 SessionEvent.RefreshFailed -> Transition(SessionState.Unauthenticated)
             }
             SessionState.Authenticated -> when (event) {
-                SessionEvent.LoginSucceeded, SessionEvent.RefreshSucceeded, SessionEvent.RefreshFailed ->
-                    Transition(SessionState.Authenticated)
+                SessionEvent.LoginSucceeded -> Transition(SessionState.Authenticated, listOf(Effect.ClearCredentials))
+                SessionEvent.RefreshSucceeded, SessionEvent.RefreshFailed -> Transition(SessionState.Authenticated)
                 SessionEvent.Logout -> Transition(SessionState.Unauthenticated, listOf(Effect.ClearCredentials))
                 SessionEvent.TokenExpired -> Transition(SessionState.Refreshing, listOf(Effect.RequestTokenRefresh))
             }

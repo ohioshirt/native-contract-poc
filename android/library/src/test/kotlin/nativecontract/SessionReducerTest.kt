@@ -16,7 +16,7 @@ class SessionReducerTest {
                 Transition(SessionState.Unauthenticated), Transition(SessionState.Unauthenticated),
                 Transition(SessionState.Unauthenticated)),
             SessionState.Authenticated to listOf(
-                Transition(SessionState.Authenticated), Transition(SessionState.Unauthenticated, listOf(Effect.ClearCredentials)),
+                Transition(SessionState.Authenticated, listOf(Effect.ClearCredentials)), Transition(SessionState.Unauthenticated, listOf(Effect.ClearCredentials)),
                 Transition(SessionState.Refreshing, listOf(Effect.RequestTokenRefresh)), Transition(SessionState.Authenticated),
                 Transition(SessionState.Authenticated)),
             SessionState.Refreshing to listOf(
@@ -30,6 +30,14 @@ class SessionReducerTest {
                 assertEquals(transitions[index].state, reducer.state, "$state × $event state")
             }
         }
+    }
+
+    @Test fun repeatedLoginWhileAuthenticatedClearsCredentialsAndKeepsSessionAuthenticated() {
+        val reducer = SessionReducer()
+        assertEquals(Transition(SessionState.Authenticated), reducer.handle(SessionEvent.LoginSucceeded))
+        val repeatedLogin = reducer.handle(SessionEvent.LoginSucceeded)
+        assertEquals(Transition(SessionState.Authenticated, listOf(Effect.ClearCredentials)), repeatedLogin)
+        assertEquals(SessionState.Authenticated, reducer.state)
     }
 
     @Test fun runnerEmitsExactWireShapeAndResetsPerScenario() {

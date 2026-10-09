@@ -13,7 +13,7 @@ final class ReducerTests: XCTestCase {
             (.unauthenticated, .tokenExpired, .unauthenticated, []),
             (.unauthenticated, .refreshSucceeded, .unauthenticated, []),
             (.unauthenticated, .refreshFailed, .unauthenticated, []),
-            (.authenticated, .loginSucceeded, .authenticated, []),
+            (.authenticated, .loginSucceeded, .authenticated, [.clearCredentials]),
             (.authenticated, .logout, .unauthenticated, [.clearCredentials]),
             (.authenticated, .tokenExpired, .refreshing, [.requestTokenRefresh]),
             (.authenticated, .refreshSucceeded, .authenticated, []),
@@ -32,5 +32,18 @@ final class ReducerTests: XCTestCase {
             XCTAssertEqual(result.effects, expectedEffects, "\(initial) × \(event)")
             XCTAssertEqual(reducer.state, expectedState, "\(initial) × \(event)")
         }
+    }
+
+    func testRepeatedLoginWhileAuthenticatedClearsCredentialsEachTime() {
+        var reducer = AuthReducer(initialState: .authenticated)
+
+        let first = reducer.handle(.loginSucceeded)
+        XCTAssertEqual(first.state, .authenticated)
+        XCTAssertEqual(first.effects, [.clearCredentials])
+
+        let second = reducer.handle(.loginSucceeded)
+        XCTAssertEqual(second.state, .authenticated)
+        XCTAssertEqual(second.effects, [.clearCredentials])
+        XCTAssertEqual(reducer.state, .authenticated)
     }
 }

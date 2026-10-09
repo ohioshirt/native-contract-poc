@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "states": [
     "Unauthenticated",
     "Authenticated",
@@ -54,7 +54,9 @@
       "state": "Authenticated",
       "event": "LoginSucceeded",
       "nextState": "Authenticated",
-      "effects": []
+      "effects": [
+        "ClearCredentials"
+      ]
     },
     {
       "state": "Authenticated",

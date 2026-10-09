@@ -1,0 +1,3 @@
+native-wire	Kotlin empty-ID rejection removed; regression red/green
+verification-review	Malformed-ID report, stale mutation evidence, output path and exit evidence fixed in one review wave
+verification-format	Two-column Markdown delimiter corrected; focused regression

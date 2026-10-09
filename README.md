@@ -65,6 +65,27 @@ Cは両実装の一致だけでは共通の誤りを検出できないことを�
 
 Swift/Kotlin担当の独立性は別コンテキストと指示で確保しました。OS権限で互いのソース読取を禁止するアクセス制御は導入していません。エージェントの自己申告や人間のレビューをテストの代替にしません。
 
+## 実測結果と受け入れ証拠
+
+[GitHub Actions](https://github.com/ohioshirt/native-contract-poc/actions/workflows/verify.yml) はPull RequestおよびmainへのPushで同じ全ゲートを実行します。macOS 15 / Xcode 16.2、Python 3.12.8、Temurin Java 17.0.13を指定し、Kotlin/Gradleは上記の固定版を使います。Job SummaryとArtifactに判定、各実行コマンド・ログ末尾、Commit SHAとdirty状態、Contract SHA-256、ツールバージョン、シナリオ数、失敗ステップ、Mutation manifestを保存します。ツールのバージョン指定はありますが、CI Action tagやrunner imageは可変です。
+
+![CI](https://github.com/ohioshirt/native-contract-poc/actions/workflows/verify.yml/badge.svg?branch=main)
+
+| 受け入れ項目 | 記録 |
+|---|---|
+| SwiftPM / Gradle build・unit test | [v1ローカル](docs/experiments/v1-evidence.md)、[v2ローカル](docs/experiments/v2-evidence.md) |
+| 全781シナリオ、両ContractとDifferential | 両版の実測ログにPASSとシナリオ数を記録 |
+| Mutation A/B/C | 両版で期待行列を実測。CはContract FAIL/FAIL、Differential PASS |
+| hosted CI | [v1成功Run](https://github.com/ohioshirt/native-contract-poc/actions/runs/37883044062)、[実Artifact証拠](docs/experiments/v1-ci-evidence.md)。現行mainの結果は上記workflow/badge参照 |
+| 仕様変更自動追従 | [Phase6の変更・比較記録](docs/experiments/change-comparison.md) |
+| 人間によるソース比較なし | 独立Luna実装、AI品質確認、仕様oracleを使用。人間は目的・制約・GitHub接続先のみ提示 |
+
+v1 Contract SHA-256は`9fec360d43f7f730867a6d5819e9065d629f55c107a6172a81f7016e2bdfee34`、v2は`fe82d03428bcd33b7101aaf24ff717d3bc59035f10ec22c2719147ca9602ec11`です。履歴用のbaseline snapshotは現行の振る舞い基準ではありません。現行基準は常に`contract/specification.json`です。
+
+Luna単独との追加比較では、同じEffect変更を隔離コピーで実施し、Sol側の独立期待値でも評価しました。モデルの費用・トークン情報は取得できず、単発で条件にも差があるため優劣や費用対効果は結論しません。親セッションの正確なモデルIDは取得できずSolの役割を担い、Luna workerには`gpt-6-luna`、AI reviewerには`gpt-6.1-sol`を明示指定しました。
+
+[プロセスと前提](docs/experiments/process.md)、[最終AIレビュー](docs/agent-reports/final-review.md)に委譲境界・修正記録・残存リスクを記載しています。完全な実装等価性、非同期・実機・認証情報の置換は保証しません。
+
 ## 次のステップ
 
 TLA+またはQuintで状態遷移・安全性・活性をモデル化し、仕様の性質をモデル検査できます。実装との対応には別の精緻化関係または抽象化が必要です。非同期refreshを追加する場合はrequest/session ID、遅延応答、Logoutとの競合、イベントの順序と公平性を仕様化します。SwiftPM/Maven配布前には公開API互換性、実機統合、バージョン管理、署名と依存供給網を検討します。
