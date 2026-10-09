@@ -7,7 +7,7 @@ OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 cd "$ROOT_DIR"
 export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 owned=(scenarios.json swift-traces.json kotlin-traces.json summary.json summary.md report.md git-sha.txt git-dirty.txt contract-sha256.txt swift-version.txt xcode-version.txt java-version.txt kotlin-version.txt python-version.txt)
-for gate in python-tests swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner differential native-differential mutations; do
+for gate in python-tests formal-verify swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner differential native-differential mutations; do
   owned+=("$gate.exit-code" "$gate.stdout.log" "$gate.stderr.log" "$gate.command.log")
 done
 for file in "${owned[@]}"; do rm -f "$OUT_DIR/$file"; done
@@ -16,6 +16,7 @@ export SWIFTPM_MODULECACHE_OVERRIDE="${SWIFTPM_MODULECACHE_OVERRIDE:-$ROOT_DIR/.
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$ROOT_DIR/.gradle-home}"
 overall=0
 mutation_skipped=0
+FORMAL_OUT_DIR="$(mktemp -d "$OUT_DIR/formal-run.XXXXXX")"
 run() {
   name="$1"; shift
   printf '$' > "$OUT_DIR/$name.command.log"
@@ -28,6 +29,7 @@ run() {
   return 0
 }
 run python-tests python3 -m unittest discover -s verification -p 'test_*.py' -v
+run formal-verify bash scripts/formal-verify.sh "$FORMAL_OUT_DIR"
 run swift-build swift build --package-path ios
 run swift-test swift test --package-path ios
 run kotlin-build ./android/gradlew -p android build :library:installDist
@@ -69,7 +71,7 @@ grep -E 'kotlin\("jvm"\) version' android/build.gradle.kts > "$OUT_DIR/kotlin-ve
 if [ "$overall" -ne 0 ]; then echo 'Overall: FAIL' > "$OUT_DIR/report.md"
 elif [ "$mutation_skipped" -eq 1 ]; then echo 'Overall: INCOMPLETE (mutation matrix NOT_RUN)' > "$OUT_DIR/report.md"
 else echo 'Overall: PASS' > "$OUT_DIR/report.md"; fi
-for name in python-tests swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner differential native-differential mutations; do
+for name in python-tests formal-verify swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner differential native-differential mutations; do
   printf '\n## %s (exit %s)\n' "$name" "$(cat "$OUT_DIR/$name.exit-code" 2>/dev/null || echo unknown)" >> "$OUT_DIR/report.md"
   printf '\nCommand: ' >> "$OUT_DIR/report.md"; cat "$OUT_DIR/$name.command.log" >> "$OUT_DIR/report.md"
   printf '\nstdout tail:\n```\n' >> "$OUT_DIR/report.md"; tail -n 10 "$OUT_DIR/$name.stdout.log" >> "$OUT_DIR/report.md" 2>/dev/null || true
@@ -80,5 +82,9 @@ for name in git-sha git-dirty contract-sha256 swift-version xcode-version java-v
   printf '\n## %s\n```\n' "$name" >> "$OUT_DIR/report.md"; cat "$OUT_DIR/$name.txt" >> "$OUT_DIR/report.md"; printf '```\n' >> "$OUT_DIR/report.md"
 done
 if [ -f "$OUT_DIR/summary.md" ]; then printf '\n' >> "$OUT_DIR/report.md"; cat "$OUT_DIR/summary.md" >> "$OUT_DIR/report.md"; fi
+if [ -f "$FORMAL_OUT_DIR/.formal-verification-owned" ] && [ -f "$FORMAL_OUT_DIR/report.md" ]; then
+  printf '\n## Formal model report\n\n' >> "$OUT_DIR/report.md"
+  cat "$FORMAL_OUT_DIR/report.md" >> "$OUT_DIR/report.md"
+fi
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then cat "$OUT_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"; fi
 exit "$overall"

@@ -26,7 +26,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17.0.13+11'
-      - name: Verify schema, builds, unit tests and differential traces
+      - name: Verify formal model, schema, builds, unit tests and differential traces
         id: verify
         run: bash scripts/verify.sh "$RUNNER_TEMP/native-contract-artifacts"
         env:

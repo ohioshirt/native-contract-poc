@@ -8,7 +8,8 @@ SwiftとKotlinの独立したネイティブライブラリを、共通の有限
 contract/       唯一の現行仕様 specification.json、JSON Schema、共通テスト入力
 ios/           SwiftPMライブラリ、TraceRunner、ユニットテスト
 android/        Kotlin/JVM Gradleライブラリ、JSON Runner、ユニットテスト
-verification/   Python標準ライブラリによる仕様チェック、oracle、比較器
+verification/   Python標準ライブラリによる仕様チェック、oracle、比較器、TLA+モデル検証
+formal/         JSON仕様から生成する有限TLA+遷移表と汎用モデル
 scripts/        ローカル検証、隔離Mutation実験
 .github/        macOS GitHub Actions
 docs/          設計、実行計画、エージェント報告、変更実験の証拠
@@ -29,13 +30,14 @@ Contract Conformanceは各実装を仕様と比較し、Differentialは両実装
 Swift 6以降、Java 17、Python 3.9以降が必要です。Gradleは同梱wrapperの9.8.0（distribution SHA-256付き）、Kotlin pluginは2.3.20、JSON dependencyはkotlinx.serialization 1.8.1に固定しています。初回はGradle distribution/Maven依存のネットワーク取得が必要です。Runner stdoutにはJSONのみ、ビルドと診断は別ログへ保存します。
 
 ```sh
-bash scripts/verify.sh                 # build/unit/contract/differential/mutationの全ゲート
+bash scripts/verify.sh                 # formal/build/unit/contract/differential/mutationの全ゲート
 bash scripts/verify.sh "$PWD/reports/run"  # 出力先を指定
+bash scripts/formal-verify.sh          # formal gate単独。reports/formal-latestへ証拠を保存
 bash scripts/mutation-test.sh          # Mutationだけ実行
 python3 -m unittest discover -s verification -p 'test_*.py' -v
 ```
 
-`SKIP_MUTATIONS=1 bash scripts/verify.sh` は変更実験用の短いゲートです。この実行だけではMutationの成功を主張できません。ビルドキャッシュは`.gradle-home/`と`.swift-cache/`へ保存し、検証Artifactに混入させません。
+`SKIP_MUTATIONS=1 bash scripts/verify.sh` は変更実験用の短いゲートです。この実行だけではMutationの成功を主張できません。Formal gateにskip設定はありません。ビルドキャッシュは`.gradle-home/`、`.swift-cache/`、`.formal-cache/`へ保存し、検証Artifactに混入させません。
 
 例として、Runnerはstdinの`{"scenarios":[{"scenario":"example","events":["LoginSucceeded","TokenExpired"]}]}`を読み、stdoutへ`{"traces":[...]}`を返します。Swift Runnerは`ios/.build/debug/TraceRunner`、Kotlin Runnerは`android/library/build/install/library/bin/library`です。
 
@@ -59,7 +61,11 @@ Cは両実装の一致だけでは共通の誤りを検出できないことを�
 
 ## 保証できる範囲と限界
 
-検証が示すのは、実行したツールチェーンと入力領域における、長さ0〜4のイベント列・各中間状態・順序付きEffectの仕様適合性と実装間一致です。有限テストは任意の長さに対するプログラムの完全な等価性証明ではありません。仕様の有限モデルについての全域性等のチェックも、実装の形式的な証明とは別です。
+ネイティブ検証が示すのは、実行したツールチェーンと入力領域における、長さ0〜4のイベント列・各中間状態・順序付きEffectの仕様適合性と実装間一致です。有限テストは任意の長さに対するプログラムの完全な等価性証明ではありません。
+
+Formal gateは、JSONから生成した有限遷移表を汎用TLA+モデルへ渡し、TLC 2.19で全到達状態を深さ制限なしに探索します。宣言集合への閉包、Effect長、観測遷移の整合性、およびdeadlock不存在を確認し、TLC状態dumpの観測をJSON遷移表と照合します。TLAPS等による演繹的な定理証明は行わず、実行対象の有限モデルをTLCで検査します。意図的なLogout/ClearCredentialsモデル欠陥も、名前付き不変条件違反と反例が実際に得られた場合だけ検出成功として扱います。TLCリリースv1.7.4のJARは`formal/toolchain.json`にURLとSHA-256を固定しています。ハッシュは公式HTTPS配布物から測定した値で、上流のdigestがなかったため、publisher署名検証を意味しません。現行JSONのSHA-256は今回の受け入れ記録に固定しています。実行する検証器に過去の仕様ハッシュを埋め込まず、将来の正規な仕様更新はその時点のJSONを検査してハッシュを記録します。
+
+この形式検査は有限モデルの全到達状態に対する安全性検査です。ネイティブ実装との比較は既存の有限トレース検査に留まり、任意のSwift/Kotlinプログラムの精緻化や等価性を証明しません。公平性やlivenessも検査しません。状態dumpとJSON表の照合はモデルの観測射影を検査しますが、全てのグラフ辺やネイティブ実装への対応を単独で証明するものではありません。
 
 呼び出し側がイベントを逐次処理することを前提にします。同時呼び出しの線形化可能性、キャンセル、非同期refreshの競合、永続化、メモリや性能上限、実機OS統合、通信や暗号の安全性、資格情報削除の実Effect、任意の不正入力への頑健性は保証対象外です。仕様・oracle・比較器が共通に誤るリスクは残ります。Mutationは指定された誤りの検出力を示すもので、全ての誤りに対する検出保証ではありません。
 
@@ -67,7 +73,7 @@ Swift/Kotlin担当の独立性は別コンテキストと指示で確保しま�
 
 ## 実測結果と受け入れ証拠
 
-[GitHub Actions](https://github.com/ohioshirt/native-contract-poc/actions/workflows/verify.yml) はPull RequestおよびmainへのPushで同じ全ゲートを実行します。macOS 15 / Xcode 16.2、Python 3.12.8、Temurin Java 17.0.13を指定し、Kotlin/Gradleは上記の固定版を使います。Job SummaryとArtifactに判定、各実行コマンド・ログ末尾、Commit SHAとdirty状態、Contract SHA-256、ツールバージョン、シナリオ数、失敗ステップ、Mutation manifestを保存します。ツールのバージョン指定はありますが、CI Action tagやrunner imageは可変です。
+[GitHub Actions](https://github.com/ohioshirt/native-contract-poc/actions/workflows/verify.yml) はPull RequestおよびmainへのPushで同じ全ゲートを実行します。macOS 15 / Xcode 16.2、Python 3.12.8、Temurin Java 17.0.13を指定し、Kotlin/Gradleは上記の固定版を使います。Job SummaryとArtifactに判定、各実行コマンド・ログ末尾、Commit SHAとdirty状態、Contract SHA-256、ツールバージョン、シナリオ数、失敗ステップ、Mutation manifest、formal reportとそのraw evidenceを保存します。ツールのバージョン指定はありますが、CI Action tagやrunner imageは可変です。
 
 ![CI](https://github.com/ohioshirt/native-contract-poc/actions/workflows/verify.yml/badge.svg?branch=main)
 
@@ -86,6 +92,8 @@ Luna単独との追加比較では、同じEffect変更を隔離コピーで実�
 
 [プロセスと前提](docs/experiments/process.md)、[最終AIレビュー](docs/agent-reports/final-review.md)に委譲境界・修正記録・残存リスクを記載しています。完全な実装等価性、非同期・実機・認証情報の置換は保証しません。
 
+形式検証の実測コマンドとログ末尾は[形式モデルの証拠](docs/experiments/formal-model-evidence.md)、[モデル実装報告](docs/agent-reports/formal-model.md)、[AIレビュー](docs/agent-reports/formal-review.md)に記録しています。[モデル境界](formal/README.md)ではTLC状態とセッション状態の違い、stutteringとEffect実行の違いを説明しています。
+
 ## 次のステップ
 
-TLA+またはQuintで状態遷移・安全性・活性をモデル化し、仕様の性質をモデル検査できます。実装との対応には別の精緻化関係または抽象化が必要です。非同期refreshを追加する場合はrequest/session ID、遅延応答、Logoutとの競合、イベントの順序と公平性を仕様化します。SwiftPM/Maven配布前には公開API互換性、実機統合、バージョン管理、署名と依存供給網を検討します。
+非同期refreshを追加する場合はrequest/session ID、遅延応答、Logoutとの競合、イベントの順序と公平性を別途仕様化します。SwiftPM/Maven配布前には公開API互換性、実機統合、バージョン管理、署名と依存供給網を検討します。

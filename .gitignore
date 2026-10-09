@@ -9,3 +9,4 @@ verification/__pycache__/
 .DS_Store
 android/verification-logs/
 docs/experiments/control-location.json
+.formal-cache/
