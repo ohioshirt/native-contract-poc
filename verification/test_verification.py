@@ -224,6 +224,33 @@ class CliTests(unittest.TestCase):
             self.assertFalse(any((output / name / "result.txt").exists() and "previous" in (output / name / "result.txt").read_text()
                                  for name in ("A-first", "B-second", "C-third")))
 
+    def test_mutation_comparator_signal_exit_is_infrastructure_failure(self):
+        config = {"cases": [{"id": "signal-case",
+                             "expected": {"swift": "PASS", "kotlin": "PASS", "differential": "PASS"},
+                             "patches": []}]}
+        sequences = ([0, 0, 0, -15], [0, 0, 0, 0, 0, 0, 0, -15])
+        for statuses in sequences:
+            with self.subTest(statuses=statuses), tempfile.TemporaryDirectory() as temp:
+                temp = Path(temp)
+                config_path, output = temp / "matrix.json", temp / "mutations"
+                config_path.write_text(json.dumps(config))
+                calls = iter(statuses)
+
+                def fake_execute(label, command, cwd, log_dir, **kwargs):
+                    status = next(calls, 0)
+                    (log_dir / f"{label}.command.log").write_text(command + "\n")
+                    (log_dir / f"{label}.stdout.log").write_text("")
+                    (log_dir / f"{label}.stderr.log").write_text("")
+                    (log_dir / f"{label}.exit-code").write_text(f"{status}\n")
+                    return status
+
+                with patch("sys.argv", ["mutations.py", str(config_path), "--output", str(output)]), patch.object(mutations, "execute", side_effect=fake_execute), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(mutations.main(), 2)
+                manifest = json.loads((output / "manifest.json").read_text())
+                self.assertEqual(manifest["cases"][0]["status"], "INFRA_FAILURE")
+                self.assertEqual(manifest["cases"][0]["exitCode"], 2)
+                self.assertFalse((output / "signal-case" / "actual.json").exists())
+
     def test_mutation_matrix_patch_sites_are_unique(self):
         matrix = json.loads((ROOT / "verification/mutation-matrix.json").read_text())
         self.assertEqual([case["expected"] for case in matrix["cases"]], [

@@ -124,11 +124,11 @@ def main():
                     if runner_status: raise RuntimeError(f"{case['id']}: {language} runner failed (infrastructure failure)")
                     compare_status = execute(f"{language}-compare", "python3 verification/compare.py {output}", work, case_dir,
                                              output_path=output_path)
-                    if compare_status > 1: raise RuntimeError(f"{case['id']}: {language} comparison failed as infrastructure")
+                    if compare_status not in (0, 1): raise RuntimeError(f"{case['id']}: {language} comparison failed as infrastructure (exit {compare_status})")
                     actual[language] = "PASS" if compare_status == 0 else "FAIL"
                 differential_status = execute("native-differential", "python3 verification/compare.py --left {input} --right {output}", work, case_dir,
                                               input_path=case_dir / "swift-traces.json", output_path=case_dir / "kotlin-traces.json")
-                if differential_status > 1: raise RuntimeError(f"{case['id']}: differential comparison failed as infrastructure")
+                if differential_status not in (0, 1): raise RuntimeError(f"{case['id']}: differential comparison failed as infrastructure (exit {differential_status})")
                 actual["differential"] = "PASS" if differential_status == 0 else "FAIL"
                 wanted = case["expected"]
                 (case_dir / "actual.json").write_text(json.dumps(actual, indent=2) + "\n")

@@ -65,3 +65,28 @@ preserved pre-fix verdicts: {'oracle': 'PASS', 'swift': 'FAIL', 'kotlin': 'FAIL'
 ```
 
 These are fresh contract/provenance checks plus a read of preserved pre-fix verdicts, not fresh native pass claims. No test counts are claimed by this reviewer.
+
+## Scoped post-audit exit-code hardening review
+
+Approved the narrow subsequent diff in `scripts/mutations.py`, `verification/test_verification.py` and the verification worker report. The conformance and direct differential guards now accept exactly exit codes 0 and 1; negative signal statuses and every other exit code become infrastructure failure. Normal 0-to-PASS and 1-to-FAIL classification is unchanged. An infrastructure failure occurs before `actual.json` is written and records the case INFRA_FAILURE with infrastructure exit 2.
+
+The mocked regression exercises the actual command order: generate, Swift build, Swift runner, Swift compare, Kotlin build, Kotlin runner, Kotlin compare, direct native differential. Its first status sequence injects the signal at Swift compare; its second injects it at the eighth command, direct differential. Thus the second subcase does reach the differential guard rather than stopping at Kotlin comparison. The worker report also records a red check with the old differential guard restored. No native gates were repeated by this reviewer.
+
+Targeted command actually executed from the project root:
+
+```sh
+python3 -m unittest verification.test_verification.CliTests.test_mutation_comparator_signal_exit_is_infrastructure_failure -v
+```
+
+Raw output (exit 0):
+
+```text
+test_mutation_comparator_signal_exit_is_infrastructure_failure (verification.test_verification.CliTests) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.055s
+
+OK
+```
+
+This targeted test is the only fresh test execution claimed in this review addendum. Final full local and hosted gates remain coordinator-owned.

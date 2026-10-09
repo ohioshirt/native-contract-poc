@@ -33,12 +33,17 @@ wc -l docs/experiments/team-review-repairs.tsv docs/experiments/phase6-team-repa
 Raw output:
 
 ```text
-       3 docs/experiments/team-review-repairs.tsv
+       4 docs/experiments/team-review-repairs.tsv
        0 docs/experiments/phase6-team-repairs.tsv
        0 docs/experiments/phase6-control-repairs.tsv
-       3 total
+       4 total
 ```
 
 ## Interpretation
 
 The experiment establishes that both configurations can make this small specified effect change and that an independent oracle detects missing changes. It does not establish that either model organization is best for general Human No-Code Development. There is only one trial per configuration, caches are warm, contexts and access boundaries differ, the orchestrator runs unrelated tasks concurrently, and actual cost metadata is unavailable. Cost comparison remains unmeasured.
+
+
+## Final infrastructure hardening
+
+After both full native change evaluations, an additional shared-harness status guard was strengthened: only comparator exits 0/1 are verdicts; all other statuses, including negative POSIX signal statuses, are infrastructure failures. This did not change native sources, contract or normal mutation expectations. The final team gate was rerun; standalone full external evidence describes the earlier reviewed harness run, not a new model repair. See [final-hardened-evidence.md](final-hardened-evidence.md).

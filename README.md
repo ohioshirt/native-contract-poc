@@ -73,10 +73,10 @@ Swift/Kotlin担当の独立性は別コンテキストと指示で確保しま�
 
 | 受け入れ項目 | 記録 |
 |---|---|
-| SwiftPM / Gradle build・unit test | [v1ローカル](docs/experiments/v1-evidence.md)、[v2ローカル](docs/experiments/v2-evidence.md) |
+| SwiftPM / Gradle build・unit test | [v1ローカル](docs/experiments/v1-evidence.md)、[v2ローカル](docs/experiments/v2-evidence.md)、[最終基盤](docs/experiments/final-hardened-evidence.md) |
 | 全781シナリオ、両ContractとDifferential | 両版の実測ログにPASSとシナリオ数を記録 |
 | Mutation A/B/C | 両版で期待行列を実測。CはContract FAIL/FAIL、Differential PASS |
-| hosted CI | [v1成功Run](https://github.com/ohioshirt/native-contract-poc/actions/runs/37883044062)、[実Artifact証拠](docs/experiments/v1-ci-evidence.md)。現行mainの結果は上記workflow/badge参照 |
+| hosted CI | [v1成功Run](https://github.com/ohioshirt/native-contract-poc/actions/runs/37883044062)、[実Artifact証拠](docs/experiments/v1-ci-evidence.md)。[v2成功Run](https://github.com/ohioshirt/native-contract-poc/actions/runs/37883776577)、[実Artifact証拠](docs/experiments/v2-ci-evidence.md)。現行mainの結果は上記workflow/badge参照 |
 | 仕様変更自動追従 | [Phase6の変更・比較記録](docs/experiments/change-comparison.md) |
 | 人間によるソース比較なし | 独立Luna実装、AI品質確認、仕様oracleを使用。人間は目的・制約・GitHub接続先のみ提示 |
 

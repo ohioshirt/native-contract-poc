@@ -84,6 +84,16 @@ Ran 1 test in 0.006s
 OK
 ```
 
+The final mutation exit-code hardening treats only comparator code 0 as PASS and code 1 as a semantic mismatch; negative signal exits and every other code are infrastructure failures. A regression injects `-15` into both native conformance and direct differential comparisons. The differential case reaches the eighth subcommand (`native-differential`); reverting that guard to the old `> 1` check produced the expected red test (`expected infrastructure exit 2, got matrix mismatch exit 1`). Final Python suite tail:
+
+```text
+python3 -m unittest discover -s verification -p 'test_*.py' -v
+...
+Ran 27 tests in 0.175s
+
+OK
+```
+
 ## CI
 
 `.github/workflows/verify.yml` runs on macOS 15 for pull requests and pushes to `main`, selects Xcode 16.2, Python 3.12.8, and Temurin Java 17.0.13, then runs `verify.sh`. The report and evidence directory are uploaded in an `always()` step, including when a gate fails. A hosted CI pass must be reported only after an actual GitHub run.
