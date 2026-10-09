@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Native contract finite Mealy machine",
+  "type": "object",
+  "required": ["version", "states", "events", "effects", "initialState", "unknownInputPolicy", "processing", "transitions", "invariants", "exhaustiveMaxLength"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "integer", "minimum": 1},
+    "states": {"$ref": "#/$defs/nonEmptyStrings"},
+    "events": {"$ref": "#/$defs/nonEmptyStrings"},
+    "effects": {"$ref": "#/$defs/stringArray"},
+    "initialState": {"type": "string"},
+    "unknownInputPolicy": {"const": "reject"},
+    "processing": {"const": "sequential-atomic"},
+    "transitions": {"type": "array", "items": {"$ref": "#/$defs/transition"}},
+    "invariants": {
+      "type": "object", "required": ["totalTransitionFunction", "stateInDeclaredSet", "effectsInDeclaredSet", "maxEffectsPerStep"],
+      "additionalProperties": false,
+      "properties": {
+        "totalTransitionFunction": {"const": true},
+        "stateInDeclaredSet": {"const": true},
+        "effectsInDeclaredSet": {"const": true},
+        "maxEffectsPerStep": {"type": "integer", "minimum": 0}
+      }
+    },
+    "exhaustiveMaxLength": {"type": "integer", "minimum": 0}
+  },
+  "$defs": {
+    "stringArray": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "nonEmptyStrings": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+    "transition": {
+      "type": "object", "required": ["state", "event", "nextState", "effects"], "additionalProperties": false,
+      "properties": {"state": {"type": "string"}, "event": {"type": "string"}, "nextState": {"type": "string"}, "effects": {"$ref": "#/$defs/stringArray"}}
+    }
+  }
+}

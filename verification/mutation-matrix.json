@@ -1,0 +1,42 @@
+{
+  "cases": [
+    {
+      "id": "A-swift-authenticated-token-expiry-next-state",
+      "expected": {"swift": "FAIL", "kotlin": "PASS", "differential": "FAIL"},
+      "patches": [
+        {
+          "file": "ios/Sources/NativeContract/AuthReducer.swift",
+          "before": "result = TransitionResult(state: .refreshing, effects: [.requestTokenRefresh])",
+          "after": "result = TransitionResult(state: .unauthenticated, effects: [.requestTokenRefresh])"
+        }
+      ]
+    },
+    {
+      "id": "B-kotlin-refresh-failure-effect",
+      "expected": {"swift": "PASS", "kotlin": "FAIL", "differential": "FAIL"},
+      "patches": [
+        {
+          "file": "android/library/src/main/kotlin/nativecontract/SessionReducer.kt",
+          "before": "SessionEvent.RefreshFailed -> Transition(SessionState.Unauthenticated, listOf(Effect.ClearCredentials))",
+          "after": "SessionEvent.RefreshFailed -> Transition(SessionState.Unauthenticated)"
+        }
+      ]
+    },
+    {
+      "id": "C-both-logout-effect",
+      "expected": {"swift": "FAIL", "kotlin": "FAIL", "differential": "PASS"},
+      "patches": [
+        {
+          "file": "ios/Sources/NativeContract/AuthReducer.swift",
+          "before": "case (.authenticated, .logout):\n            result = TransitionResult(state: .unauthenticated, effects: [.clearCredentials])",
+          "after": "case (.authenticated, .logout):\n            result = TransitionResult(state: .unauthenticated, effects: [])"
+        },
+        {
+          "file": "android/library/src/main/kotlin/nativecontract/SessionReducer.kt",
+          "before": "SessionEvent.Logout -> Transition(SessionState.Unauthenticated, listOf(Effect.ClearCredentials))",
+          "after": "SessionEvent.Logout -> Transition(SessionState.Unauthenticated)"
+        }
+      ]
+    }
+  ]
+}
