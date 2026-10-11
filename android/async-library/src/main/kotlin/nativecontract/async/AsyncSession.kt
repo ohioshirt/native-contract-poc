@@ -85,7 +85,13 @@ class AsyncSession(nextRequestId: Long = 1L) {
             AsyncState.Refreshing -> when (event) {
                 is AsyncEvent.RefreshSucceeded -> { state = AsyncState.Authenticated; pendingRequestId = null }
                 is AsyncEvent.RefreshFailed -> { state = AsyncState.Unauthenticated; pendingRequestId = null; effects = listOf(AsyncEffect.ClearCredentials) }
-                else -> Unit // Refreshing × Logout remains ignored.
+                AsyncEvent.Logout -> {
+                    state = AsyncState.Unauthenticated // PATCH_SITE_REFRESHING_LOGOUT_STATE
+                    pendingRequestId = null // PATCH_SITE_REFRESHING_LOGOUT_PENDING
+                    effects = listOf(AsyncEffect.ClearCredentials) // PATCH_SITE_REFRESHING_LOGOUT_EFFECT
+                    // PATCH_SITE_REFRESHING_LOGOUT_COUNTER_PRESERVED
+                }
+                else -> Unit
             }
         }
         return result(effects)

@@ -2,25 +2,41 @@
   "cases": [
     {
       "id": "A-swift-accepts-stale-response",
-      "expected": {"swift": "FAIL", "kotlin": "PASS", "differential": "FAIL"},
-      "patches": [{
-        "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
-        "before": "guard state == .refreshing, pendingRequestId == requestId else {",
-        "after": "guard state == .refreshing else {"
-      }]
+      "expected": {
+        "swift": "FAIL",
+        "kotlin": "PASS",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
+          "before": "guard state == .refreshing, pendingRequestId == requestId else {",
+          "after": "guard state == .refreshing else {"
+        }
+      ]
     },
     {
       "id": "B-kotlin-resets-counter-on-accepted-logout",
-      "expected": {"swift": "PASS", "kotlin": "FAIL", "differential": "FAIL"},
-      "patches": [{
-        "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
-        "before": "                    // PATCH_SITE_ACCEPTED_LOGOUT_COUNTER_RESET",
-        "after": "                    nextRequestId = 1L // intentional mutation\n                    // PATCH_SITE_ACCEPTED_LOGOUT_COUNTER_RESET"
-      }]
+      "expected": {
+        "swift": "PASS",
+        "kotlin": "FAIL",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
+          "before": "                    // PATCH_SITE_ACCEPTED_LOGOUT_COUNTER_RESET",
+          "after": "                    nextRequestId = 1L // intentional mutation\n                    // PATCH_SITE_ACCEPTED_LOGOUT_COUNTER_RESET"
+        }
+      ]
     },
     {
       "id": "C-both-accept-stale-response",
-      "expected": {"swift": "FAIL", "kotlin": "FAIL", "differential": "PASS"},
+      "expected": {
+        "swift": "FAIL",
+        "kotlin": "FAIL",
+        "differential": "PASS"
+      },
       "patches": [
         {
           "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
@@ -31,6 +47,126 @@
           "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
           "before": "if (isResponse && (state != AsyncState.Refreshing || pendingRequestId != responseId)) {",
           "after": "if (isResponse && state != AsyncState.Refreshing) {"
+        }
+      ]
+    },
+    {
+      "id": "swift-ignores-refreshing-logout",
+      "expected": {
+        "swift": "FAIL",
+        "kotlin": "PASS",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
+          "before": "        case .logout where state == .refreshing:\n            state = .unauthenticated // PATCH_SITE_REFRESHING_LOGOUT_STATE\n            pendingRequestId = nil // PATCH_SITE_REFRESHING_LOGOUT_PENDING\n            // PATCH_SITE_REFRESHING_LOGOUT_COUNTER_PRESERVED\n            return result(effects: [.clearCredentials]) // PATCH_SITE_REFRESHING_LOGOUT_EFFECT\n",
+          "after": "        case .logout where state == .refreshing:\n            return result(effects: [])\n"
+        }
+      ]
+    },
+    {
+      "id": "swift-omits-logout-clear-credentials",
+      "expected": {
+        "swift": "FAIL",
+        "kotlin": "PASS",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
+          "before": "return result(effects: [.clearCredentials]) // PATCH_SITE_REFRESHING_LOGOUT_EFFECT",
+          "after": "return result(effects: []) // PATCH_SITE_REFRESHING_LOGOUT_EFFECT"
+        }
+      ]
+    },
+    {
+      "id": "swift-retains-logout-pending",
+      "expected": {
+        "swift": "FAIL",
+        "kotlin": "PASS",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
+          "before": "pendingRequestId = nil // PATCH_SITE_REFRESHING_LOGOUT_PENDING",
+          "after": "// intentional mutation: pending preserved"
+        }
+      ]
+    },
+    {
+      "id": "swift-resets-refreshing-logout-counter",
+      "expected": {
+        "swift": "FAIL",
+        "kotlin": "PASS",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "ios/Sources/AsyncNativeContract/AsyncSession.swift",
+          "before": "// PATCH_SITE_REFRESHING_LOGOUT_COUNTER_PRESERVED",
+          "after": "nextRequestId = 1 // intentional mutation"
+        }
+      ]
+    },
+    {
+      "id": "kotlin-ignores-refreshing-logout",
+      "expected": {
+        "swift": "PASS",
+        "kotlin": "FAIL",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
+          "before": "                AsyncEvent.Logout -> {\n                    state = AsyncState.Unauthenticated // PATCH_SITE_REFRESHING_LOGOUT_STATE\n                    pendingRequestId = null // PATCH_SITE_REFRESHING_LOGOUT_PENDING\n                    effects = listOf(AsyncEffect.ClearCredentials) // PATCH_SITE_REFRESHING_LOGOUT_EFFECT\n                    // PATCH_SITE_REFRESHING_LOGOUT_COUNTER_PRESERVED\n                }\n",
+          "after": "                AsyncEvent.Logout -> Unit\n"
+        }
+      ]
+    },
+    {
+      "id": "kotlin-omits-logout-clear-credentials",
+      "expected": {
+        "swift": "PASS",
+        "kotlin": "FAIL",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
+          "before": "effects = listOf(AsyncEffect.ClearCredentials) // PATCH_SITE_REFRESHING_LOGOUT_EFFECT",
+          "after": "effects = emptyList() // PATCH_SITE_REFRESHING_LOGOUT_EFFECT"
+        }
+      ]
+    },
+    {
+      "id": "kotlin-retains-logout-pending",
+      "expected": {
+        "swift": "PASS",
+        "kotlin": "FAIL",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
+          "before": "pendingRequestId = null // PATCH_SITE_REFRESHING_LOGOUT_PENDING",
+          "after": "// intentional mutation: pending preserved"
+        }
+      ]
+    },
+    {
+      "id": "kotlin-resets-refreshing-logout-counter",
+      "expected": {
+        "swift": "PASS",
+        "kotlin": "FAIL",
+        "differential": "FAIL"
+      },
+      "patches": [
+        {
+          "file": "android/async-library/src/main/kotlin/nativecontract/async/AsyncSession.kt",
+          "before": "// PATCH_SITE_REFRESHING_LOGOUT_COUNTER_PRESERVED",
+          "after": "nextRequestId = 1L // intentional mutation"
         }
       ]
     }

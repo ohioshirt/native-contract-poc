@@ -22,6 +22,61 @@ class AsyncContractTests(unittest.TestCase):
         self.spec = json.loads((ROOT / "contract/specification.json").read_text())
         self.schema = json.loads((ROOT / "contract/schema.json").read_text())
 
+    def test_logout_invalidation_contract_and_historical_ignore(self):
+        trace = async_contract.oracle("logout", ["LoginSucceeded", "TokenExpired", "Logout", "Logout"], self.spec)
+        self.assertEqual(trace["steps"][2], {"event": {"event": "Logout"}, "state": "Unauthenticated", "pendingRequestId": None,
+                                          "effects": [{"effect": "ClearCredentials"}], "rejection": None})
+        self.assertEqual(trace["steps"][3]["effects"], [])
+        old = copy.deepcopy(self.spec)
+        old["version"] = 3
+        old["async"]["logoutWhileRefreshing"] = "ignore"
+        row = next(r for r in old["async"]["transitions"] if (r["state"], r["event"]) == ("Refreshing", "Logout"))
+        row.update(nextState="Refreshing", effects=[], pendingAction="preserve")
+        validate(old, self.schema)
+        self.assertEqual(async_contract.oracle("old", ["LoginSucceeded", "TokenExpired", "Logout"], old)["steps"][-1]["state"], "Refreshing")
+        for mode in ("ignore", "invalidate"):
+            bad = copy.deepcopy(old if mode == "ignore" else self.spec)
+            row = next(r for r in bad["async"]["transitions"] if (r["state"], r["event"]) == ("Refreshing", "Logout"))
+            row["effects"] = [] if mode == "invalidate" else ["ClearCredentials"]
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                validate(bad, self.schema)
+        bad = copy.deepcopy(self.spec)
+        bad["async"]["transitions"][0]["effects"] = ["ClearCredentials"]
+        with self.assertRaisesRegex(ValueError, "core row"):
+            validate(bad, self.schema)
+
+    def test_step_logout_preserves_allocator_and_canceled_replies(self):
+        for next_id in (2, None):
+            value = async_contract.step(self.spec, "Refreshing", 1, next_id, {"event": "Logout"})
+            self.assertEqual(value, {"state": "Unauthenticated", "pendingRequestId": None, "nextRequestId": next_id,
+                                     "effects": [{"effect": "ClearCredentials"}], "rejection": None})
+            for name in ("RefreshSucceeded", "RefreshFailed"):
+                stale = async_contract.step(self.spec, "Unauthenticated", None, next_id, {"event": name, "requestId": 1})
+                self.assertEqual(stale, {"state": "Unauthenticated", "pendingRequestId": None, "nextRequestId": next_id, "effects": [], "rejection": None})
+                fresh_session = async_contract.step(self.spec, "Authenticated", None, next_id, {"event": "TokenExpired"})
+                if next_id is None:
+                    self.assertEqual(fresh_session, {"state": "Authenticated", "pendingRequestId": None, "nextRequestId": None, "effects": [], "rejection": "RequestIdExhausted"})
+                else:
+                    stale = async_contract.step(self.spec, "Refreshing", 2, 3, {"event": name, "requestId": 1})
+                    self.assertEqual(stale, {"state": "Refreshing", "pendingRequestId": 2, "nextRequestId": 3, "effects": [], "rejection": None})
+                    self.assertEqual(async_contract.step(self.spec, "Refreshing", 2, 3, {"event": name, "requestId": 2})["state"],
+                                     "Authenticated" if name == "RefreshSucceeded" else "Unauthenticated")
+        self.assertEqual(async_contract.step(self.spec, "Authenticated", None, 3, {"event": "TokenExpired"}, request_id_max=3),
+                         {"state": "Refreshing", "pendingRequestId": 3, "nextRequestId": None, "effects": [{"effect": "RequestTokenRefresh", "requestId": 3}], "rejection": None})
+
+    def test_logout_policy_rejects_faults_independently_of_transition_rows(self):
+        good = {"state": "Unauthenticated", "pendingRequestId": None, "nextRequestId": 2, "effects": [{"effect": "ClearCredentials"}], "rejection": None}
+        self.assertEqual(async_contract.policy_errors(self.spec, "Refreshing", 1, 2, {"event": "Logout"}, good), [])
+        for key, value in (("state", "Refreshing"), ("pendingRequestId", 1), ("nextRequestId", 1), ("effects", [])):
+            fault = copy.deepcopy(good); fault[key] = value
+            # Deliberately poison rows too: policy must not derive its expectation from them.
+            bad_spec = copy.deepcopy(self.spec)
+            for row in bad_spec["async"]["transitions"]:
+                if (row["state"], row["event"]) == ("Refreshing", "Logout"):
+                    row.update(nextState="Refreshing", effects=[], pendingAction="preserve")
+            with self.subTest(key=key):
+                self.assertTrue(async_contract.policy_errors(bad_spec, "Refreshing", 1, 2, {"event": "Logout"}, fault))
+
     def test_async_profile_is_total_and_enumeration_has_expected_length(self):
         self.assertEqual(len(async_contract.validate(self.spec, self.schema)), 15)
         vectors = list(async_contract.exhaustive_scenarios(self.spec))
@@ -108,16 +163,31 @@ class AsyncContractTests(unittest.TestCase):
         self.assertEqual([step["effects"][0]["requestId"] for step in request_steps], [exact_boundary - 1, exact_boundary])
         self.assertEqual(precise_trace["steps"][4]["event"], {"event": "RefreshSucceeded", "requestId": exact_boundary})
 
-    def test_async_mutation_patch_sites_are_unique(self):
+class AsyncMutationFixtureTests(unittest.TestCase):
+    def test_matrix_patches_apply_once_to_frozen_low_level_fixtures(self):
+        import re
+        text = (ROOT / "docs/experiments/native-anchors.md").read_text()
+        fixtures = {}
+        for path, snippet in re.findall(r"<!-- fixture:(.*?) -->\n```(?:swift|kotlin)\n(.*?)```", text, re.S):
+            fixtures[path] = fixtures.get(path, "") + snippet
         matrix = json.loads((ROOT / "verification/async-mutation-matrix.json").read_text())
-        self.assertEqual([row["expected"] for row in matrix["cases"]], [
-            {"swift": "FAIL", "kotlin": "PASS", "differential": "FAIL"},
-            {"swift": "PASS", "kotlin": "FAIL", "differential": "FAIL"},
-            {"swift": "FAIL", "kotlin": "FAIL", "differential": "PASS"},
-        ])
         for case in matrix["cases"]:
             for patch in case["patches"]:
-                self.assertEqual((ROOT / patch["file"]).read_text().count(patch["before"]), 1, case["id"])
+                before = fixtures[patch["file"]]
+                with self.subTest(case=case["id"]):
+                    self.assertEqual(before.count(patch["before"]), 1)
+                    patched = before.replace(patch["before"], patch["after"], 1)
+                    self.assertNotEqual(before, patched)
+                    self.assertEqual(patched.count(patch["after"]), 1)
+
+
+class AsyncNativeMutationAnchorTests(unittest.TestCase):
+    def test_all_native_patch_sites_are_unique(self):
+        matrix = json.loads((ROOT / "verification/async-mutation-matrix.json").read_text())
+        for case in matrix["cases"]:
+            for patch in case["patches"]:
+                with self.subTest(case=case["id"]):
+                    self.assertEqual((ROOT / patch["file"]).read_text().count(patch["before"]), 1)
 
 
 class AsyncFormalTraceTests(unittest.TestCase):
@@ -126,6 +196,24 @@ class AsyncFormalTraceTests(unittest.TestCase):
         self.initial = {"state": "Unauthenticated", "pending": False, "previousState": "Unauthenticated",
                         "previousPending": False, "event": "__initial__", "responseClass": "NA",
                         "effects": (), "rejection": "__none__"}
+
+    def test_logout_negative_requires_exact_ignored_invalidation(self):
+        trace = [self.initial,
+                 {"state": "Authenticated", "pending": False, "previousState": "Unauthenticated", "previousPending": False,
+                  "event": "LoginSucceeded", "responseClass": "NA", "effects": (), "rejection": "__none__"},
+                 {"state": "Refreshing", "pending": True, "previousState": "Authenticated", "previousPending": False,
+                  "event": "TokenExpired", "responseClass": "NA", "effects": ("RequestTokenRefresh",), "rejection": "__none__"},
+                 {"state": "Refreshing", "pending": True, "previousState": "Refreshing", "previousPending": True,
+                  "event": "Logout", "responseClass": "NA", "effects": (), "rejection": "__none__"}]
+        with self.assertRaises(ValueError):
+            async_formal.validate_trace(trace, self.spec)
+        self.assertTrue(async_formal.validate_trace(trace, self.spec, logout_fault=True))
+        for field, value in (("state", "Unauthenticated"), ("effects", ("ClearCredentials",)), ("responseClass", "STALE"), ("rejection", "RequestIdExhausted")):
+            bad = copy.deepcopy(trace); bad[-1][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                async_formal.validate_trace(bad, self.spec, logout_fault=True)
+        with self.assertRaises(ValueError):
+            async_formal.validate_trace(trace[:-1], self.spec, logout_fault=True)
 
     def test_stale_negative_requires_exact_injected_canonical_response_row(self):
         trace = [self.initial,

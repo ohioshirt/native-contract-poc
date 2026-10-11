@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "mutations": [
+    {"id":"swift-owner-guard", "platform":"swift", "file":"ios/Sources/AsyncNativeContract/ManagedAsyncSession.swift", "original":"if !request.belongs(to: owner) {", "replacement":"if false { // MUTANT: owner guard removed", "scenario":"foreign-same-id"},
+    {"id":"kotlin-owner-guard", "platform":"kotlin", "file":"android/async-library/src/main/kotlin/nativecontract/async/ManagedAsyncSession.kt", "original":"if (!request.belongsTo(owner)) {", "replacement":"if (false) { // MUTANT: owner guard removed", "scenario":"foreign-same-id"}
+  ]
+}

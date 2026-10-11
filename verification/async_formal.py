@@ -39,6 +39,7 @@ def render_data(spec):
             f"SimpleEvents == {_set([event for event in spec['events'] if event not in ('RefreshSucceeded', 'RefreshFailed')])}\n"
             f"ResponseEvents == {_set([event for event in spec['events'] if event in ('RefreshSucceeded', 'RefreshFailed')])}\n"
             f"InitialState == {tla_string(profile['initialState'])}\n"
+            f"LogoutMode == {tla_string(profile['logoutWhileRefreshing'])}\n"
             f"MaxEffects == {spec['invariants']['maxEffectsPerStep']}\n"
             f"ExhaustionRejection == {tla_string(profile['exhaustionRejection'])}\n"
             "AsyncRows == {\n  " + ",\n  ".join(rows) + "\n}\n"
@@ -63,7 +64,7 @@ def prepare_output(path):
 
 def _run_tlc(work, jar, label, out):
     cfg = work / "AsyncSession.cfg"
-    cfg.write_text("SPECIFICATION Spec\nINVARIANT StateClosed\nINVARIANT PendingExactlyRefreshing\nINVARIANT EventClosed\nINVARIANT ResponseClassClosed\nINVARIANT EffectsClosed\nINVARIANT CurrentRequiresPending\nINVARIANT StaleResponseSafety\nINVARIANT RejectedAtomic\nINVARIANT RowTransitionSound\n")
+    cfg.write_text("SPECIFICATION Spec\nINVARIANT StateClosed\nINVARIANT PendingExactlyRefreshing\nINVARIANT EventClosed\nINVARIANT ResponseClassClosed\nINVARIANT EffectsClosed\nINVARIANT CurrentRequiresPending\nINVARIANT StaleResponseSafety\nINVARIANT RejectedAtomic\nINVARIANT LogoutPolicy\nINVARIANT RowTransitionSound\n")
     command = ["java", "-cp", str(jar), "tlc2.TLC", "-workers", "1", "-config", str(cfg), str(work / "AsyncSession.tla")]
     started = time.time()
     timed_out = False
@@ -149,7 +150,7 @@ def parse_counterexample(text):
     return states
 
 
-def validate_trace(states, spec, stale_fault=False):
+def validate_trace(states, spec, stale_fault=False, *, logout_fault=False):
     if not isinstance(states, list) or not states:
         raise ValueError("TLC trace must contain an initial state")
     profile = spec["async"]
@@ -161,6 +162,8 @@ def validate_trace(states, spec, stale_fault=False):
     if initial != {"state": profile["initialState"], "pending": False, "previousState": profile["initialState"], "previousPending": False,
                    "event": "__initial__", "responseClass": "NA", "effects": (), "rejection": "__none__"}:
         raise ValueError("TLC trace initial state mismatch")
+    if stale_fault and logout_fault:
+        raise ValueError("negative controls must be isolated")
     witnessed_final_fault = False
     for index, row_state in enumerate(states[1:], start=1):
         if not isinstance(row_state, dict) or set(row_state) != required:
@@ -183,6 +186,13 @@ def validate_trace(states, spec, stale_fault=False):
         if row_state["pending"] != (row_state["state"] == "Refreshing"):
             raise ValueError("pending iff Refreshing violated in trace")
         event = row_state["event"]
+        if logout_fault and index == len(states) - 1:
+            expected_fault = {"state": "Refreshing", "pending": True, "previousState": "Refreshing", "previousPending": True,
+                              "event": "Logout", "responseClass": "NA", "effects": (), "rejection": "__none__"}
+            if profile["logoutWhileRefreshing"] != "invalidate" or prev["state"] != "Refreshing" or not prev["pending"] or row_state != expected_fault:
+                raise ValueError("negative Logout trace differs from exact injected ignored-invalidation step")
+            witnessed_final_fault = True
+            continue
         row = rows.get((prev["state"], event))
         if row is None: raise ValueError("TLC trace event has no canonical async row")
         if row_state["rejection"] == profile["exhaustionRejection"]:
@@ -217,6 +227,8 @@ def validate_trace(states, spec, stale_fault=False):
         want_pending = True if row["pendingAction"] == "allocate" else False if row["pendingAction"] == "clear" else prev["pending"]
         if row_state["state"] != row["nextState"] or row_state["pending"] != want_pending or row_state["effects"] != tuple(row["effects"]):
             raise ValueError("TLC transition differs from canonical async row")
+    if logout_fault and (len(states) < 2 or not witnessed_final_fault):
+        raise ValueError("negative TLC trace must end with ignored Logout invalidation")
     if stale_fault and (len(states) < 2 or not witnessed_final_fault):
         raise ValueError("negative TLC trace must end with an observed stale-response Apply violation")
     return True
@@ -271,17 +283,36 @@ def run(output, jar_path=None):
         raise RuntimeError("negative TLC control did not violate named StaleResponseSafety")
     trace = parse_counterexample(neg_text)
     validate_trace(trace, spec, stale_fault=True)
+    logout_negative = out / "negative-logout"
+    logout_negative.mkdir()
+    (logout_negative / "AsyncContractData.tla").write_text(data)
+    anchor = 'SimpleApply(row) ==\n  Apply(row, "NA")'
+    replacement = ('SimpleApply(row) ==\n'
+                   '  IF row.state = "Refreshing" /\\ row.event = "Logout" THEN\n'
+                   '    Observe(state, pending, << >>, NoRejection, "NA", row.event)\n'
+                   '  ELSE Apply(row, "NA")')
+    if base.count(anchor) != 1: raise RuntimeError("Logout mutation anchor must be unique")
+    (logout_negative / "AsyncSession.tla").write_text(base.replace(anchor, replacement, 1))
+    logout = _run_tlc(logout_negative, jar, "negative-logout-tlc", out)
+    logout_text = logout["stdout"] + "\n" + logout["stderr"]
+    (out / "negative-logout-counterexample.txt").write_text(logout_text)
+    if logout["timedOut"]: raise RuntimeError("negative Logout TLC timed out")
+    if logout["exit"] != 12 or "Invariant LogoutPolicy is violated." not in logout_text:
+        raise RuntimeError("negative Logout control did not violate named LogoutPolicy")
+    logout_trace = parse_counterexample(logout_text)
+    validate_trace(logout_trace, spec, logout_fault=True)
     meta.update({"generatedDataSha256": hashlib.sha256(data.encode()).hexdigest(),
             "positiveStateCountsFromTLC": {"generated": int(counts[0][0]), "distinct": int(counts[0][1])},
-            "negativeCounterexampleStates": len(trace), "abstraction": "pending boolean; CURRENT means routed equality with active ID; IDs themselves and numeric refinement omitted; calls serialized"}
+            "negativeCounterexampleStates": len(trace), "logoutNegativeCounterexampleStates": len(logout_trace), "abstraction": "pending boolean; CURRENT means routed equality with active ID; IDs themselves and numeric refinement omitted; calls serialized"}
     )
     (out / "metadata.json").write_text(json.dumps(meta, indent=2) + "\n")
-    report = {"status": "PASS", **meta, "negativeControl": "named StaleResponseSafety counterexample parsed and validated"}
+    report = {"status": "PASS", **meta, "negativeControl": "named StaleResponseSafety and LogoutPolicy counterexamples parsed and validated"}
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     (out / "report.md").write_text("# Async correlation formal verification\n\nStatus: **PASS**\n\n"
         f"- TLC `{lock['release']}` / `{lock['tlcVersion']}`; JAR SHA-256 `{jar_hash}`\n"
         f"- Positive exploration: {counts[0][0]} generated, {counts[0][1]} distinct states (captured from TLC output).\n"
         f"- Negative control: `StaleResponseSafety` counterexample validated across {len(trace)} states.\n"
+        f"- Negative Logout control: `LogoutPolicy` counterexample validated across {len(logout_trace)} states.\n"
         "- Abstraction: pending is Boolean. CURRENT represents a correctly routed response equal to the active request ID; STALE represents every nonmatching/duplicate/unissued response. IDs, numeric exhaustion refinement, native implementation refinement, concurrency and liveness are not claimed. Request allocation may nondeterministically reject atomically to represent exhaustion.\n"
         "- Raw TLC stdout/stderr and counterexample: `positive-tlc.json`, `negative-tlc.json`, `negative-counterexample.txt`.\n")
     return report
@@ -293,7 +324,7 @@ def _write_failure_report(path, error):
     meta_path = out / "metadata.json"
     meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
     report = {"status": "FAIL", "error": f"{type(error).__name__}: {error}", "metadata": meta}
-    for label in ("positive-tlc", "negative-tlc"):
+    for label in ("positive-tlc", "negative-tlc", "negative-logout-tlc"):
         result_path = out / f"{label}.json"
         if result_path.is_file(): report[label] = json.loads(result_path.read_text())
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -308,7 +339,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         report = run(args.output, args.jar)
-        print(f"PASS: async TLC; {report['positiveStateCountsFromTLC']['distinct']} distinct states; validated StaleResponseSafety counterexample")
+        print(f"PASS: async TLC; {report['positiveStateCountsFromTLC']['distinct']} distinct states; validated StaleResponseSafety and LogoutPolicy counterexamples")
         return 0
     except Exception as error:
         try: _write_failure_report(args.output, error)

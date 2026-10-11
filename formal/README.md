@@ -22,7 +22,7 @@ Native behavior is checked using its independent contract/differential/mutation 
 
 ## Async correlation abstraction
 
-`AsyncSession.tla` is checked separately from the synchronous `Session.tla` gate by `scripts/async-formal-verify.sh`. Its transition records are generated from the validated v3 `async.transitions` rows. It tracks the session state, a Boolean pending-request flag and predecessor observations. A response may be labelled CURRENT only while a request is pending; under the same-instance routing assumption, CURRENT means the response ID equals that pending ID. STALE represents all other IDs, including duplicate, old, future and foreign-session responses. The model abstracts away numeric IDs, signed64 allocation and native implementation refinement. Allocation may nondeterministically take an atomic exhaustion branch. It checks pending iff Refreshing, row/effect closure, stale no-op safety and rejection atomicity; it makes no liveness claim. The isolated mutant removes the stale response guard and must produce a parsed `StaleResponseSafety` counterexample. See [async verification evidence](../docs/agent-reports/async-verification.md).
+`AsyncSession.tla` is checked separately from the synchronous `Session.tla` gate by `scripts/async-formal-verify.sh`. Its transition records are generated from the validated v4 `async.transitions` rows. It tracks the session state, a Boolean pending-request flag and predecessor observations. A response may be labelled CURRENT only while a request is pending; under the same-instance routing assumption, CURRENT means the response ID equals that pending ID. STALE represents all other IDs, including duplicate, old, future and foreign-session responses. The model abstracts away numeric IDs, signed64 allocation and native implementation refinement. Allocation may nondeterministically take an atomic exhaustion branch. It checks pending iff Refreshing, row/effect closure, stale no-op safety and rejection atomicity; it makes no liveness claim. The isolated mutant removes the stale response guard and must produce a parsed `StaleResponseSafety` counterexample. See [async verification evidence](../docs/agent-reports/async-verification.md).
 
 ## Commands
 
@@ -32,3 +32,16 @@ bash scripts/verify.sh "$PWD/reports/full"
 ```
 
 The standalone output directory must be empty or marked as owned by the runner. Full verification creates a fresh formal run directory and records its exact path in the gate command log. Never interpret an unrelated or older report as the result of the current run. Tool cache files stay outside evidence.
+
+## Explicit numeric and ownership instantiation
+
+verification.numeric_model separately explores two owner identities with IDs 1..3, initially (Unauthenticated,null,1) per owner and null exhaustion. This is a test parameter substitution, not a production signed64 profile accepted by the schema. An independent reducer implements JSON row rules and compares every reachable successor's full triple, effects and rejection with verification.async_contract.step(..., request_id_max=3). It generates both response kinds for every actually issued token to each owner, simple events and snapshots. No forged initial tokens exist.
+
+The strengthened proof state includes per-owner ghost issued-ID sets. The native abstraction is alpha(native)=(state,pending,next,owner); ghost history is instrumentation, not a public snapshot. Invariants cover pending iff Refreshing, monotonicity/no reuse, atomic exhaustion, owner isolation and stale/canceled-token no-op. Reset-on-Logout and owner-check-removed mutants require concrete counterexamples. Low-level routing is a caller assumption; the managed facade enforces retained reference ownership for ordinary external source clients.
+
+Completed histories require an independent inventory and a witness preserving every real-time edge and full observation. Effect provenance rejects fabricated/future tokens. [Explicit bounds](../docs/experiments/managed-history-format.md) turn search exhaustion or missing observed concurrency into INCONCLUSIVE. Native owner mutants and separate external compile/runtime clients supplement these checks. None proves unbounded native refinement, liveness, credentials or transport cancellation.
+
+```sh
+python3 -m verification.numeric_model --output "$PWD/reports/numeric-manual"
+bash scripts/managed-verify.sh "$PWD/reports/managed-manual"
+```

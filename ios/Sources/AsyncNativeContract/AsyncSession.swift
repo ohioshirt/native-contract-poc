@@ -78,6 +78,11 @@ public struct AsyncSession {
             pendingRequestId = requestId
             nextRequestId = requestId == Int64.max ? nil : requestId + 1
             return result(effects: [.requestTokenRefresh(requestId: requestId)])
+        case .logout where state == .refreshing:
+            state = .unauthenticated // PATCH_SITE_REFRESHING_LOGOUT_STATE
+            pendingRequestId = nil // PATCH_SITE_REFRESHING_LOGOUT_PENDING
+            // PATCH_SITE_REFRESHING_LOGOUT_COUNTER_PRESERVED
+            return result(effects: [.clearCredentials]) // PATCH_SITE_REFRESHING_LOGOUT_EFFECT
         case .loginSucceeded, .logout, .tokenExpired:
             var reducer = AuthReducer(initialState: state)
             let coreEvent: AuthEvent = switch event {

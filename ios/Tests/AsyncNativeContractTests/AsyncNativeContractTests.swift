@@ -36,17 +36,83 @@ final class AsyncNativeContractTests: XCTestCase {
         XCTAssertEqual(session.nextRequestId, 3)
     }
 
-    func testRefreshingLogoutIsIgnoredAndLogoutLoginDoesNotResetCounter() {
+    func testRefreshingLogoutClearsPendingRequestAndRepeatedLogoutHasNoEffects() {
         var session = AsyncSession()
         _ = session.handle(.loginSucceeded)
         _ = session.handle(.tokenExpired)
         let logout = session.handle(.logout)
-        XCTAssertEqual(logout.state, .refreshing)
-        XCTAssertEqual(session.pendingRequestId, 1)
-        _ = session.handle(.refreshSucceeded(requestId: 1))
-        _ = session.handle(.logout)
-        _ = session.handle(.loginSucceeded)
+        XCTAssertEqual(logout.state, .unauthenticated)
+        XCTAssertNil(logout.pendingRequestId)
+        XCTAssertEqual(logout.effects, [.clearCredentials])
+        XCTAssertNil(logout.rejection)
+        XCTAssertNil(session.pendingRequestId)
         XCTAssertEqual(session.nextRequestId, 2)
+
+        let repeatedLogout = session.handle(.logout)
+        XCTAssertEqual(repeatedLogout.state, .unauthenticated)
+        XCTAssertNil(repeatedLogout.pendingRequestId)
+        XCTAssertTrue(repeatedLogout.effects.isEmpty)
+        XCTAssertNil(repeatedLogout.rejection)
+        XCTAssertEqual(session.nextRequestId, 2)
+    }
+
+    func testStaleRepliesAfterRefreshingLogoutCannotAffectNewRequest() {
+        var session = AsyncSession()
+        _ = session.handle(.loginSucceeded)
+        _ = session.handle(.tokenExpired)
+        let logout = session.handle(.logout)
+        XCTAssertEqual(logout.effects, [.clearCredentials])
+
+        _ = session.handle(.loginSucceeded)
+        let newRequest = session.handle(.tokenExpired)
+        XCTAssertEqual(newRequest.effects, [.requestTokenRefresh(requestId: 2)])
+
+        for stale in [session.handle(.refreshSucceeded(requestId: 1)), session.handle(.refreshFailed(requestId: 1))] {
+            XCTAssertEqual(stale.state, .refreshing)
+            XCTAssertEqual(stale.pendingRequestId, 2)
+            XCTAssertTrue(stale.effects.isEmpty)
+            XCTAssertNil(stale.rejection)
+            XCTAssertEqual(session.state, .refreshing)
+            XCTAssertEqual(session.pendingRequestId, 2)
+            XCTAssertEqual(session.nextRequestId, 3)
+        }
+
+        let current = session.handle(.refreshSucceeded(requestId: 2))
+        XCTAssertEqual(current.state, .authenticated)
+        XCTAssertNil(current.pendingRequestId)
+        XCTAssertEqual(session.nextRequestId, 3)
+    }
+
+    func testLogoutOfFinalAllocatedIdKeepsAllocatorExhausted() {
+        var session = AsyncSession(nextRequestId: Int64.max)
+        _ = session.handle(.loginSucceeded)
+        let allocated = session.handle(.tokenExpired)
+        XCTAssertEqual(allocated.effects, [.requestTokenRefresh(requestId: Int64.max)])
+        XCTAssertEqual(session.pendingRequestId, Int64.max)
+        XCTAssertNil(session.nextRequestId)
+
+        let logout = session.handle(.logout)
+        XCTAssertEqual(logout.state, .unauthenticated)
+        XCTAssertNil(logout.pendingRequestId)
+        XCTAssertEqual(logout.effects, [.clearCredentials])
+        XCTAssertNil(logout.rejection)
+        XCTAssertNil(session.pendingRequestId)
+        XCTAssertNil(session.nextRequestId)
+
+        let staleSuccess = session.handle(.refreshSucceeded(requestId: Int64.max))
+        XCTAssertEqual(staleSuccess.state, .unauthenticated)
+        XCTAssertNil(staleSuccess.pendingRequestId)
+        XCTAssertTrue(staleSuccess.effects.isEmpty)
+        XCTAssertNil(staleSuccess.rejection)
+        XCTAssertNil(session.nextRequestId)
+
+        _ = session.handle(.loginSucceeded)
+        let exhausted = session.handle(.tokenExpired)
+        XCTAssertEqual(exhausted.rejection, .requestIdExhausted)
+        XCTAssertEqual(exhausted.state, .authenticated)
+        XCTAssertNil(exhausted.pendingRequestId)
+        XCTAssertNil(session.nextRequestId)
+        XCTAssertTrue(exhausted.effects.isEmpty)
     }
 
     func testMaximumIdIsAllocatedOnceThenExhaustionIsAtomic() {

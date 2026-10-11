@@ -98,6 +98,9 @@ def validate_async(spec, profile):
         raise ValueError("async initialNextRequestId outside request ID range")
     if profile["exhaustionRejection"] != "RequestIdExhausted":
         raise ValueError("async exhaustion rejection must be RequestIdExhausted")
+    mode = profile["logoutWhileRefreshing"]
+    if mode not in {"ignore", "invalidate"}:
+        raise ValueError("async Logout policy must be ignore or invalidate")
     rows = profile["transitions"]
     domain = set(product(states, events))
     table = {}
@@ -114,18 +117,24 @@ def validate_async(spec, profile):
         if row["guard"] != ("activeResponse" if response else "always"):
             raise ValueError(f"async guard incoherent for {pair}")
         expected_action = ("allocate" if pair == ("Authenticated", "TokenExpired") else
-                           "clear" if pair in {("Authenticated", "Logout"), ("Refreshing", "RefreshSucceeded"), ("Refreshing", "RefreshFailed")} else
+                           "clear" if pair in {("Authenticated", "Logout"), ("Refreshing", "RefreshSucceeded"), ("Refreshing", "RefreshFailed")} or (pair == ("Refreshing", "Logout") and mode == "invalidate") else
                            "preserve")
         if row["pendingAction"] != expected_action:
             raise ValueError(f"async pending action incoherent for {pair}")
         resulting_pending = row["pendingAction"] == "allocate" or (row["pendingAction"] == "preserve" and row["state"] == "Refreshing")
         if (row["nextState"] == "Refreshing") != resulting_pending:
             raise ValueError(f"async pending iff Refreshing violated for {pair}")
-        if pair == ("Refreshing", "Logout") and (row["nextState"] != "Refreshing" or row["pendingAction"] != "preserve" or row["effects"]):
-            raise ValueError("async Refreshing Logout must preserve pending request and have no effects")
+        if len(row["effects"]) > spec["invariants"]["maxEffectsPerStep"]:
+            raise ValueError(f"async effect bound exceeded for {pair}")
+        if pair == ("Refreshing", "Logout"):
+            want = ("Unauthenticated", ["ClearCredentials"], "clear") if mode == "invalidate" else ("Refreshing", [], "preserve")
+            if (row["nextState"], row["effects"], row["pendingAction"]) != want:
+                raise ValueError(f"async Refreshing Logout must exactly implement {mode} policy")
         table[pair] = row
     core_rows = {(row["state"], row["event"]): (row["nextState"], row["effects"]) for row in spec["transitions"]}
     for pair, row in table.items():
+        if pair == ("Refreshing", "Logout") and mode == "invalidate":
+            continue
         if (row["nextState"], row["effects"]) != core_rows[pair]:
             raise ValueError(f"async action disagrees with core row for {pair}")
     missing = domain - table.keys()

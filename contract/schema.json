@@ -39,7 +39,7 @@
         "requestIdMin": {"type": "integer", "minimum": 1}, "requestIdMax": {"type": "integer", "minimum": 1},
         "requestIdScope": {"enum": ["instance"]}, "reusePolicy": {"enum": ["never"]},
         "overflowPolicy": {"enum": ["reject-before-mutation"]}, "exhaustionRejection": {"type": "string"},
-        "logoutWhileRefreshing": {"enum": ["ignore"]},
+        "logoutWhileRefreshing": {"enum": ["ignore", "invalidate"]},
         "guardMismatch": {"enum": ["preserve-state-pending-counter-and-no-effects"]},
         "transitions": {"type": "array", "items": {"$ref": "#/$defs/asyncTransition"}},
         "verification": {

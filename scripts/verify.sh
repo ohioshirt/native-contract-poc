@@ -7,7 +7,7 @@ OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 cd "$ROOT_DIR"
 export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
 owned=(scenarios.json swift-traces.json kotlin-traces.json summary.json summary.md report.md git-sha.txt git-dirty.txt contract-sha256.txt swift-version.txt xcode-version.txt java-version.txt kotlin-version.txt python-version.txt)
-for gate in python-tests formal-verify async-formal-verify swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner differential native-differential mutations async-runner async-mutations; do
+for gate in python-tests formal-verify async-formal-verify swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner differential native-differential mutations async-runner async-mutations managed-verify; do
   owned+=("$gate.exit-code" "$gate.stdout.log" "$gate.stderr.log" "$gate.command.log")
 done
 for file in "${owned[@]}"; do rm -f "$OUT_DIR/$file"; done
@@ -18,6 +18,7 @@ overall=0
 mutation_skipped=0
 FORMAL_OUT_DIR="$(mktemp -d "$OUT_DIR/formal-run.XXXXXX")"
 ASYNC_FORMAL_OUT_DIR="$(mktemp -d "$OUT_DIR/async-formal-run.XXXXXX")"
+MANAGED_OUT_DIR="$(mktemp -d "$OUT_DIR/managed-run.XXXXXX")"
 run() {
   name="$1"; shift
   printf '$' > "$OUT_DIR/$name.command.log"
@@ -45,6 +46,7 @@ else echo 'Kotlin runner not attempted: build failed' > "$OUT_DIR/kotlin-runner.
 if [ "$(cat "$OUT_DIR/swift-build.exit-code")" = 0 ] && [ "$(cat "$OUT_DIR/kotlin-build.exit-code")" = 0 ]; then
   run async-runner bash scripts/async-verify.sh "$OUT_DIR/async"
 else echo 'Async runners not attempted: one or both builds failed' > "$OUT_DIR/async-runner.stderr.log"; echo 125 > "$OUT_DIR/async-runner.exit-code"; overall=1; fi
+run managed-verify bash scripts/managed-verify.sh "$MANAGED_OUT_DIR"
 verify_args=(python3 verification/verify.py --report "$OUT_DIR/summary.json" --markdown "$OUT_DIR/summary.md")
 if [ -f "$OUT_DIR/swift-traces.json" ]; then verify_args+=(--swift "$OUT_DIR/swift-traces.json"); fi
 if [ -f "$OUT_DIR/kotlin-traces.json" ]; then verify_args+=(--kotlin "$OUT_DIR/kotlin-traces.json"); fi
@@ -78,7 +80,7 @@ grep -E 'kotlin\("jvm"\) version' android/build.gradle.kts > "$OUT_DIR/kotlin-ve
 if [ "$overall" -ne 0 ]; then echo 'Overall: FAIL' > "$OUT_DIR/report.md"
 elif [ "$mutation_skipped" -eq 1 ]; then echo 'Overall: INCOMPLETE (mutation matrix NOT_RUN)' > "$OUT_DIR/report.md"
 else echo 'Overall: PASS' > "$OUT_DIR/report.md"; fi
-for name in python-tests formal-verify async-formal-verify swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner async-runner differential native-differential mutations async-mutations; do
+for name in python-tests formal-verify async-formal-verify swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner async-runner differential native-differential mutations async-mutations managed-verify; do
   printf '\n## %s (exit %s)\n' "$name" "$(cat "$OUT_DIR/$name.exit-code" 2>/dev/null || echo unknown)" >> "$OUT_DIR/report.md"
   printf '\nCommand: ' >> "$OUT_DIR/report.md"; cat "$OUT_DIR/$name.command.log" >> "$OUT_DIR/report.md"
   printf '\nstdout tail:\n```\n' >> "$OUT_DIR/report.md"; tail -n 10 "$OUT_DIR/$name.stdout.log" >> "$OUT_DIR/report.md" 2>/dev/null || true
@@ -96,6 +98,10 @@ fi
 if [ -f "$ASYNC_FORMAL_OUT_DIR/.async-formal-owned" ] && [ -f "$ASYNC_FORMAL_OUT_DIR/report.md" ]; then
   printf '\n## Async formal model report\n\n' >> "$OUT_DIR/report.md"
   cat "$ASYNC_FORMAL_OUT_DIR/report.md" >> "$OUT_DIR/report.md"
+fi
+if [ -f "$MANAGED_OUT_DIR/.managed-evaluator-owned" ] && [ -f "$MANAGED_OUT_DIR/report.md" ]; then
+  printf '\n## Managed evaluator report\n\n' >> "$OUT_DIR/report.md"
+  cat "$MANAGED_OUT_DIR/report.md" >> "$OUT_DIR/report.md"
 fi
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then cat "$OUT_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"; fi
 exit "$overall"

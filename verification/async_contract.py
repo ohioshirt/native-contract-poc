@@ -70,6 +70,9 @@ def exhaustive_scenarios(spec):
 
 def named_scenarios(spec):
     return [
+        {"scenario": "canceled-success-after-logout-new-request", "events": ["LoginSucceeded", "TokenExpired", "Logout", "Logout", "LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": 1}, {"event": "RefreshSucceeded", "requestId": 2}]},
+        {"scenario": "canceled-failure-after-logout-new-request", "events": ["LoginSucceeded", "TokenExpired", "Logout", "LoginSucceeded", "TokenExpired", {"event": "RefreshFailed", "requestId": 1}, {"event": "RefreshFailed", "requestId": 2}]},
+        {"scenario": "logout-after-final-allocation-preserves-exhaustion", "nextRequestId": MAX_ID, "events": ["LoginSucceeded", "TokenExpired", "Logout", {"event": "RefreshSucceeded", "requestId": MAX_ID}, {"event": "RefreshFailed", "requestId": MAX_ID}, "LoginSucceeded", "TokenExpired"]},
         {"scenario": "old-success-after-new-request", "events": ["LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": 1}, "TokenExpired", {"event": "RefreshSucceeded", "requestId": 1}, {"event": "RefreshSucceeded", "requestId": 2}]},
         {"scenario": "old-failure-after-new-request", "events": ["LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": 1}, "TokenExpired", {"event": "RefreshFailed", "requestId": 1}, {"event": "RefreshFailed", "requestId": 2}]},
         {"scenario": "old-reply-after-logout-login", "events": ["LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": 1}, "Logout", "LoginSucceeded", {"event": "RefreshSucceeded", "requestId": 1}]},
@@ -79,11 +82,66 @@ def named_scenarios(spec):
         {"scenario": "duplicate-completion", "events": ["LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": 1}, {"event": "RefreshSucceeded", "requestId": 1}]},
         {"scenario": "future-unissued-id", "events": ["LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": 2}]},
         {"scenario": "repeated-login", "events": ["LoginSucceeded", "LoginSucceeded", "LoginSucceeded"]},
-        {"scenario": "refreshing-logout-ignored", "events": ["LoginSucceeded", "TokenExpired", "Logout", {"event": "RefreshSucceeded", "requestId": 1}]},
+        {"scenario": "refreshing-logout-" + spec["async"]["logoutWhileRefreshing"], "events": ["LoginSucceeded", "TokenExpired", "Logout", {"event": "RefreshSucceeded", "requestId": 1}]},
         {"scenario": "allocate-signed64-maximum", "nextRequestId": MAX_ID, "events": ["LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": MAX_ID}, "TokenExpired"]},
         {"scenario": "allocate-final-two-signed64-ids", "nextRequestId": MAX_ID - 1, "events": ["LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": MAX_ID - 1}, "TokenExpired", {"event": "RefreshSucceeded", "requestId": MAX_ID}, "TokenExpired"]},
         {"scenario": "cross-json-safe-integer-boundary", "nextRequestId": 9007199254740991, "events": ["LoginSucceeded", "TokenExpired", {"event": "RefreshSucceeded", "requestId": 9007199254740991}, "TokenExpired", {"event": "RefreshSucceeded", "requestId": 9007199254740992}]},
     ]
+
+
+def step(spec, state, pending, next_id, event, *, request_id_max=None):
+    """Pure full-triple reduction. A smaller bound is only a finite test instantiation.
+
+    event is a normalized event object; ordinary production bounds remain signed64.
+    No state is retained and neither event nor specification is modified.
+    """
+    profile = spec["async"]
+    maximum = profile["requestIdMax"] if request_id_max is None else request_id_max
+    if type(maximum) is not int or not profile["requestIdMin"] <= maximum <= profile["requestIdMax"]:
+        raise ValueError("request_id_max must be within the production ID range")
+    row = next(row for row in profile["transitions"] if row["state"] == state and row["event"] == event["event"])
+    active = row["guard"] == "always" or (state == "Refreshing" and pending is not None and event.get("requestId") == pending)
+    effects, rejection = [], None
+    if active:
+        if row["pendingAction"] == "allocate" and next_id is None:
+            rejection = profile["exhaustionRejection"]
+        else:
+            state = row["nextState"]
+            if row["pendingAction"] == "clear":
+                pending = None
+            elif row["pendingAction"] == "allocate":
+                allocated = next_id
+                pending = allocated
+                next_id = None if allocated == maximum else allocated + 1
+            effects = [{"effect": effect, **({"requestId": allocated} if effect == "RequestTokenRefresh" else {})}
+                       for effect in row["effects"]]
+    return {"state": state, "pendingRequestId": pending, "nextRequestId": next_id, "effects": effects, "rejection": rejection}
+
+
+def policy_errors(spec, state, pending, next_id, event, result):
+    """Lifecycle properties independent of the transition table's row contents."""
+    errors = []
+    unchanged = {"state": state, "pendingRequestId": pending, "nextRequestId": next_id, "effects": [], "rejection": None}
+    if (result["pendingRequestId"] is not None) != (result["state"] == "Refreshing"):
+        errors.append("pending iff Refreshing")
+    if event["event"] == "Logout":
+        if result["nextRequestId"] != next_id:
+            errors.append("Logout preserves allocator including exhaustion")
+        if state == "Refreshing":
+            want = dict(unchanged)
+            if spec["async"]["logoutWhileRefreshing"] == "invalidate":
+                want.update(state="Unauthenticated", pendingRequestId=None, effects=[{"effect": "ClearCredentials"}])
+            if result != want:
+                errors.append("Refreshing Logout policy")
+        elif state == "Unauthenticated" and result != unchanged:
+            errors.append("repeated Logout is a no-op")
+    if event["event"] in RESPONSES and (state != "Refreshing" or pending != event["requestId"]):
+        if result != unchanged:
+            errors.append("stale response preserves full triple with no effects or rejection")
+    if result["rejection"] == spec["async"]["exhaustionRejection"]:
+        if result != {**unchanged, "rejection": spec["async"]["exhaustionRejection"]} or (state, event["event"], next_id) != ("Authenticated", "TokenExpired", None):
+            errors.append("exhaustion rejection is atomic")
+    return errors
 
 
 def oracle(scenario, raw_events, spec, next_request_id=None):
@@ -93,24 +151,9 @@ def oracle(scenario, raw_events, spec, next_request_id=None):
     next_id = profile["initialNextRequestId"] if next_request_id is None else next_request_id
     steps = []
     for event in events:
-        name = event["event"]
-        row = next(row for row in profile["transitions"] if row["state"] == state and row["event"] == name)
-        response_id = event.get("requestId")
-        active = row["guard"] == "always" or (state == "Refreshing" and pending is not None and response_id == pending)
-        effects, rejection = [], None
-        if active:
-            if row["pendingAction"] == "allocate" and next_id is None:
-                rejection = profile["exhaustionRejection"]
-            else:
-                state = row["nextState"]
-                if row["pendingAction"] == "clear": pending = None
-                elif row["pendingAction"] == "allocate":
-                    allocated = next_id
-                    pending = allocated
-                    next_id = None if allocated == profile["requestIdMax"] else allocated + 1
-                for effect in row["effects"]:
-                    effects.append({"effect": effect, **({"requestId": allocated} if effect == "RequestTokenRefresh" else {})})
-        steps.append({"event": event, "state": state, "pendingRequestId": pending, "effects": effects, "rejection": rejection})
+        value = step(spec, state, pending, next_id, event)
+        state, pending, next_id = value["state"], value["pendingRequestId"], value["nextRequestId"]
+        steps.append({"event": event, **{key: value[key] for key in ("state", "pendingRequestId", "effects", "rejection")}})
     return {"scenario": scenario, "steps": steps}
 
 

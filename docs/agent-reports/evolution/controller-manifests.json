@@ -1,0 +1,42 @@
+[
+  {
+    "revision": "r1",
+    "digest": "c801ad810217540101718dfd933d6d8d35333c180954666fd5905ad695770d60",
+    "manifest": "reports/evolution/manifest-r1.json",
+    "oldNativeRed": "reports/evolution/protocol-r1/old-native-red-01/result.json",
+    "oldNativeVerdict": "SEMANTIC_FAIL",
+    "status": "superseded-after-infrastructure-failure",
+    "candidateAttempt": "reports/evolution/protocol-r1/candidate-full-01/result.json",
+    "sourceArchive": "reports/evolution/candidate-r1-source.tar.gz",
+    "sourceArchiveSha256": "b63cb388a1f748a896f6d0431d78f8f41708ad80fd5d7aa841694c702aef6c69",
+    "reason": "Swift module/object layout and Kotlin constructor-probe arity required evaluator correction"
+  },
+  {
+    "revision": "r2",
+    "digest": "2719f833120802c3335139c1fd254e04db3814bec116e53e915a5c18ef726481",
+    "manifest": "reports/evolution/manifest-r2.json",
+    "status": "historical-pass-superseded-for-fable-P2",
+    "reason": "reviewed API artifact-layout and constructor-probe correction",
+    "candidateAttempt": "reports/evolution/protocol-r2/candidate-full-01/result.json",
+    "candidateDigest": "635754a4683503f28d4c83112056ae8eb9a2bd85fb78fede5c30cdccd314c157",
+    "oldNativeRed": "reports/evolution/protocol-r2/old-native-red-01/result.json",
+    "oldNativeVerdict": "SEMANTIC_FAIL",
+    "candidateVerdict": "PASS",
+    "sourceArchive": "reports/evolution/candidate-r2-source.tar.gz",
+    "sourceArchiveSha256": "8ee1e8346346828e5580c55f9fa4cd266b8c20dab5805c5b3f0218ca3a3af0a7",
+    "resultBindingsRechecked": true
+  },
+  {
+    "revision": "r3",
+    "digest": "80b798a2106022efca62fb5a138a2dc19fb66b32eaaa772137f082d974e4e4e1",
+    "manifest": "reports/evolution/manifest-r3.json",
+    "status": "accepted-local-fable-reviewed",
+    "reason": "Fable P2: bound result checks preserve actual evaluation verdict and CLI exit",
+    "candidateAttempt": "reports/evolution/protocol-r3/candidate-full-01/result.json",
+    "candidateVerdict": "PASS",
+    "candidateDigest": "2594ede9a47604c32aaf4013826844cae942abb30de45d04c62a7778ae9a68ae",
+    "oldNativeRed": "reports/evolution/protocol-r3/old-native-red-01/result.json",
+    "oldNativeVerdict": "SEMANTIC_FAIL",
+    "resultBindingsRechecked": true
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "reports/evolution/baseline-native/AsyncTraceRunner": "7a19dcc342077438efd529812d57a18ff1883da149c8a4477f5a5c8d693b9e62",
+  "reports/evolution/baseline-native/async-library/bin/async-library": "816bb31c3e63fd0c310568d607e9f3d5b1d8213e813f459a91e8b44548daadb3",
+  "reports/evolution/baseline-native/async-library/bin/async-library.bat": "cd5de56a376f4afb741c54f7050eab8441167c6b9972c34dadc6939e12d37180",
+  "reports/evolution/baseline-native/async-library/lib/annotations-13.0.jar": "ace2a10dc8e2d5fd34925ecac03e4988b2c0f851650c94b8cef49ba1bd111478",
+  "reports/evolution/baseline-native/async-library/lib/async-library-1.0.0.jar": "720760f6982608907311a8375f68e8ef64af6775f28c71c4d65b799298ede4f1",
+  "reports/evolution/baseline-native/async-library/lib/kotlin-stdlib-2.3.20.jar": "0ae12504a5040ebaf37703908483420d1a5624dd1d93f357665f8c77c848a01e",
+  "reports/evolution/baseline-native/async-library/lib/kotlinx-serialization-core-jvm-1.8.1.jar": "3565b6d4d789bf70683c45566944287fc1d8dc75c23d98bd87d01059cc76f2b3",
+  "reports/evolution/baseline-native/async-library/lib/kotlinx-serialization-json-jvm-1.8.1.jar": "8769e5647557e3700919c32d508f5c5dad53c5d8234cd10846354fbcff14aa24"
+}

@@ -1,0 +1,75 @@
+{
+  "changeId": "async-logout-invalidate-v4",
+  "baselineCommit": "8458f66a0691532a7f48e7ca1fb14fc86238b67f",
+  "experimentKind": "lower-model execution with parent coordination; not controlled model comparison",
+  "parentModel": "not independently exposed",
+  "workers": [
+    {
+      "task": "plan_review",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "protocol",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "contract",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "managed_evaluator",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "swift_logout",
+      "model": "gpt-6-luna",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "kotlin_logout",
+      "model": "gpt-6-luna",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "logout_review",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "medium"
+    },
+    {
+      "task": "swift_managed",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "kotlin_managed",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "protocol_review",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "swift_managed_review",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    },
+    {
+      "task": "kotlin_managed_review",
+      "model": "gpt-6.1-sol",
+      "reasoningEffort": "high"
+    }
+  ],
+  "billableTokens": null,
+  "cost": null,
+  "cacheConditions": {
+    "build": "warm shared Gradle cache; worktree Swift builds",
+    "provider": "not controlled or observed"
+  },
+  "seed": 0
+}

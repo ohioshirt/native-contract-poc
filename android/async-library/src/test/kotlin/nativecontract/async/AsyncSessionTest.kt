@@ -40,6 +40,73 @@ class AsyncSessionTest {
         assertIs<AsyncRejection>(exhausted.rejection)
     }
 
+    @Test fun logoutCancelsRefreshAndRepeatedLogoutHasNoEffects() {
+        val session = AsyncSession()
+        session.handle(AsyncEvent.LoginSucceeded)
+        val request = session.handle(AsyncEvent.TokenExpired)
+        val cancelled = session.handle(AsyncEvent.Logout)
+
+        assertEquals(AsyncState.Unauthenticated, cancelled.state)
+        assertEquals(null, cancelled.pendingRequestId)
+        assertEquals(listOf(AsyncEffect.ClearCredentials), cancelled.effects)
+        assertEquals(null, cancelled.rejection)
+        assertEquals(2L, session.nextRequestId)
+
+        val repeated = session.handle(AsyncEvent.Logout)
+        assertEquals(AsyncState.Unauthenticated, repeated.state)
+        assertEquals(null, repeated.pendingRequestId)
+        assertEquals(emptyList(), repeated.effects)
+        assertEquals(null, repeated.rejection)
+        assertEquals(2L, session.nextRequestId)
+        assertIs<AsyncEffect.RequestTokenRefresh>(request.effects.single())
+    }
+
+    @Test fun cancelledSuccessAndFailureCannotChangeANewerRefresh() {
+        val session = AsyncSession()
+        session.handle(AsyncEvent.LoginSucceeded)
+        session.handle(AsyncEvent.TokenExpired)
+        session.handle(AsyncEvent.Logout)
+        session.handle(AsyncEvent.LoginSucceeded)
+        val current = session.handle(AsyncEvent.TokenExpired)
+        assertEquals(2L, current.pendingRequestId)
+        val beforeStaleResponses = session.snapshot()
+
+        val staleSuccess = session.handle(AsyncEvent.RefreshSucceeded(1))
+        assertEquals(beforeStaleResponses, session.snapshot())
+        assertEquals(emptyList(), staleSuccess.effects)
+        assertEquals(null, staleSuccess.rejection)
+
+        val staleFailure = session.handle(AsyncEvent.RefreshFailed(1))
+        assertEquals(beforeStaleResponses, session.snapshot())
+        assertEquals(emptyList(), staleFailure.effects)
+        assertEquals(null, staleFailure.rejection)
+
+        val fresh = session.handle(AsyncEvent.RefreshSucceeded(2))
+        assertEquals(AsyncState.Authenticated, fresh.state)
+        assertEquals(null, fresh.pendingRequestId)
+    }
+
+    @Test fun cancellingFinalAllocatedIdPreservesExhaustion() {
+        val session = AsyncSession(Long.MAX_VALUE)
+        session.handle(AsyncEvent.LoginSucceeded)
+        val allocated = session.handle(AsyncEvent.TokenExpired)
+        assertEquals(Long.MAX_VALUE, allocated.pendingRequestId)
+        assertEquals(null, session.nextRequestId)
+
+        val cancelled = session.handle(AsyncEvent.Logout)
+        assertEquals(AsyncState.Unauthenticated, cancelled.state)
+        assertEquals(null, cancelled.pendingRequestId)
+        assertEquals(listOf(AsyncEffect.ClearCredentials), cancelled.effects)
+        assertEquals(null, session.nextRequestId)
+
+        session.handle(AsyncEvent.LoginSucceeded)
+        val before = session.snapshot()
+        val exhausted = session.handle(AsyncEvent.TokenExpired)
+        assertEquals(before, session.snapshot())
+        assertEquals(AsyncRejection.RequestIdExhausted, exhausted.rejection)
+        assertEquals(emptyList(), exhausted.effects)
+    }
+
     @Test fun runnerEmitsTypedEventsAndRejectsWholeDocument() {
         val out = runAsyncDocument("""{"scenarios":[{"scenario":"x","events":[{"event":"LoginSucceeded"},{"event":"TokenExpired"},{"event":"RefreshSucceeded","requestId":1}]}]}""")
         assertEquals(true, out.contains("\"pendingRequestId\":1"))

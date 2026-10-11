@@ -1,0 +1,628 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "foreign-same-id",
+      "seed": 0,
+      "owners": [
+        {
+          "id": "A",
+          "nextRequestId": 1
+        },
+        {
+          "id": "B",
+          "nextRequestId": 1
+        }
+      ],
+      "concurrentPhases": [],
+      "operations": [
+        {
+          "id": "a-login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 0,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "b-login",
+          "owner": "B",
+          "kind": "handle",
+          "phase": 0,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "a-issue",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "b-issue",
+          "owner": "B",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "foreign-success",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "b-issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "foreign-failure",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 3,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "b-issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "a-snapshot",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 4,
+          "after": []
+        },
+        {
+          "id": "b-snapshot",
+          "owner": "B",
+          "kind": "snapshot",
+          "phase": 4,
+          "after": []
+        },
+        {
+          "id": "own-success",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 5,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "a-issue",
+              "effectIndex": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "logout-vs-success",
+      "seed": 0,
+      "owners": [
+        {
+          "id": "A",
+          "nextRequestId": 1
+        }
+      ],
+      "concurrentPhases": [
+        2
+      ],
+      "operations": [
+        {
+          "id": "login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 0,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "issue",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "logout",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "response",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "during",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 2,
+          "after": []
+        },
+        {
+          "id": "final",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 3,
+          "after": []
+        }
+      ]
+    },
+    {
+      "id": "logout-vs-failure",
+      "seed": 0,
+      "owners": [
+        {
+          "id": "A",
+          "nextRequestId": 1
+        }
+      ],
+      "concurrentPhases": [
+        2
+      ],
+      "operations": [
+        {
+          "id": "login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 0,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "issue",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "logout",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "response",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "during",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 2,
+          "after": []
+        },
+        {
+          "id": "final",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 3,
+          "after": []
+        }
+      ]
+    },
+    {
+      "id": "stale-after-new-request",
+      "seed": 0,
+      "owners": [
+        {
+          "id": "A",
+          "nextRequestId": 1
+        }
+      ],
+      "concurrentPhases": [],
+      "operations": [
+        {
+          "id": "login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 0,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "old-issue",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "logout",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "new-login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 3,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "new-issue",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 4,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "old-success",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 5,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "old-issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "old-failure",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 6,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "old-issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "before-fresh",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 7,
+          "after": []
+        },
+        {
+          "id": "fresh",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 8,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "new-issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "after-fresh",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 9,
+          "after": []
+        }
+      ]
+    },
+    {
+      "id": "simultaneous-expiration",
+      "seed": 0,
+      "owners": [
+        {
+          "id": "A",
+          "nextRequestId": 1
+        }
+      ],
+      "concurrentPhases": [
+        1
+      ],
+      "operations": [
+        {
+          "id": "login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 0,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "expire-one",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-two",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "during",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 1,
+          "after": []
+        },
+        {
+          "id": "final",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 2,
+          "after": []
+        }
+      ]
+    },
+    {
+      "id": "max-logout-exhaustion",
+      "seed": 0,
+      "owners": [
+        {
+          "id": "A",
+          "nextRequestId": 9223372036854775807
+        }
+      ],
+      "concurrentPhases": [],
+      "operations": [
+        {
+          "id": "login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 0,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "last-issue",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "logout",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "new-login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 3,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "exhausted",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 4,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "old-success",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 5,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "last-issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "old-failure",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 6,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "last-issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "final",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 7,
+          "after": []
+        }
+      ]
+    },
+    {
+      "id": "last-two-ids",
+      "seed": 0,
+      "owners": [
+        {
+          "id": "A",
+          "nextRequestId": 9223372036854775806
+        }
+      ],
+      "concurrentPhases": [],
+      "operations": [
+        {
+          "id": "login",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 0,
+          "after": [],
+          "event": {
+            "event": "LoginSucceeded"
+          }
+        },
+        {
+          "id": "penultimate",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "complete-one",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "penultimate",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "last",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 3,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "complete-two",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 4,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "last",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "exhausted",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 5,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "final",
+          "owner": "A",
+          "kind": "snapshot",
+          "phase": 6,
+          "after": []
+        }
+      ]
+    }
+  ]
+}

@@ -39,7 +39,7 @@ python3 -m unittest discover -s verification -p 'test_*.py' -v
 
 `SKIP_MUTATIONS=1 bash scripts/verify.sh` は変更実験用の短いゲートです。この実行だけではMutationの成功を主張できません。Formal gateにskip設定はありません。ビルドキャッシュは`.gradle-home/`、`.swift-cache/`、`.formal-cache/`へ保存し、検証Artifactに混入させません。
 
-Async response correlationは仕様v3の追加profileとして検証します。既存の同期`TraceRunner`はそのまま保ち、Swiftの`AsyncTraceRunner`とKotlinの`async-library` runnerを使います。入力イベントは`{"event":"LoginSucceeded"}`のようなオブジェクトで、refresh応答だけ`requestId`を持ちます。シナリオは任意で正のsigned64 `nextRequestId`を指定でき、指定しない場合は1から始まります。出力は各ステップのstate、pendingRequestId、effect（要求IDを含む）、rejectionを検査し、IDも比較対象にします。AuthenticatedのLogoutは通常どおり処理し、Refreshing中のLogoutは現行仕様どおり無視します。
+Async response correlationは仕様v4の追加profileとして検証します。既存の同期`TraceRunner`はそのまま保ち、Swiftの`AsyncTraceRunner`とKotlinの`async-library` runnerを使います。入力イベントは`{"event":"LoginSucceeded"}`のようなオブジェクトで、refresh応答だけ`requestId`を持ちます。シナリオは任意で正のsigned64 `nextRequestId`を指定でき、指定しない場合は1から始まります。出力は各ステップのstate、pendingRequestId、effect（要求IDを含む）、rejectionを検査し、IDも比較対象にします。AuthenticatedのLogoutは通常どおり処理し、Refreshing中のLogoutは相関を無効化し、Unauthenticatedへ遷移してClearCredentialsを返します。allocatorは保持し、旧応答はEffect/rejectionを返さず全状態を保持します。
 
 ```sh
 bash scripts/async-verify.sh                 # 7 event variants、長さ0〜5、名前付き境界trace
@@ -77,7 +77,7 @@ Formal gateは、JSONから生成した有限遷移表を汎用TLA+モデルへ�
 
 この形式検査は有限モデルの全到達状態に対する安全性検査です。ネイティブ実装との比較は既存の有限トレース検査に留まり、任意のSwift/Kotlinプログラムの精緻化や等価性を証明しません。公平性やlivenessも検査しません。状態dumpとJSON表の照合はモデルの観測射影を検査しますが、全てのグラフ辺やネイティブ実装への対応を単独で証明するものではありません。
 
-呼び出し側がイベントを逐次処理することを前提にします。同時呼び出しの線形化可能性、キャンセル、非同期refreshの競合、永続化、メモリや性能上限、実機OS統合、通信や暗号の安全性、資格情報削除の実Effect、任意の不正入力への頑健性は保証対象外です。仕様・oracle・比較器が共通に誤るリスクは残ります。Mutationは指定された誤りの検出力を示すもので、全ての誤りに対する検出保証ではありません。
+低レベルAPIは呼び出し側の逐次処理を前提にします。managed APIには後述の有限履歴検査を追加します。任意実行の線形化可能性、キャンセル、非同期refreshの競合、永続化、メモリや性能上限、実機OS統合、通信や暗号の安全性、資格情報削除の実Effect、任意の不正入力への頑健性は保証対象外です。仕様・oracle・比較器が共通に誤るリスクは残ります。Mutationは指定された誤りの検出力を示すもので、全ての誤りに対する検出保証ではありません。
 
 Swift/Kotlin担当の独立性は別コンテキストと指示で確保しました。OS権限で互いのソース読取を禁止するアクセス制御は導入していません。エージェントの自己申告や人間のレビューをテストの代替にしません。
 
@@ -104,9 +104,9 @@ Luna単独との追加比較では、同じEffect変更を隔離コピーで実�
 
 形式検証の実測コマンドとログ末尾は[形式モデルの証拠](docs/experiments/formal-model-evidence.md)、[モデル実装報告](docs/agent-reports/formal-model.md)、[AIレビュー](docs/agent-reports/formal-review.md)に記録しています。[モデル境界](formal/README.md)ではTLC状態とセッション状態の違い、stutteringとEffect実行の違いを説明しています。
 
-## 相関管理の受け入れ記録
+## 相関管理の受け入れ記録（v3履歴）
 
-v3の唯一の振る舞い基準は`contract/specification.json`です。同期tableと既存ネイティブsourceは維持し、追加の`async` profileがguard、pending action、ID範囲、非再利用、上限到達時の無変更rejectionを定義します。v3 SHA-256は`2accb45bb81eb931c2debebb990719e05d49109eec7afec2718c34afdc3aa08f`です。
+v3受け入れ時の振る舞い基準は`contract/specification.json`です。同期tableと既存ネイティブsourceは維持し、追加の`async` profileがguard、pending action、ID範囲、非再利用、上限到達時の無変更rejectionを定義します。v3 SHA-256は`2accb45bb81eb931c2debebb990719e05d49109eec7afec2718c34afdc3aa08f`です。
 
 実測コマンド・ログ末尾は[相関管理の証拠](docs/experiments/async-correlation-evidence.md)、[Swift報告](docs/agent-reports/async-swift.md)、[Kotlin報告](docs/agent-reports/async-kotlin.md)、[検証器報告](docs/agent-reports/async-verification.md)に保存しています。[Native AIレビュー](docs/agent-reports/async-native-review.md)と[検証器AIレビュー](docs/agent-reports/async-verification-review.md)の修正事項は解消しました。
 
@@ -130,8 +130,24 @@ v3の唯一の振る舞い基準は`contract/specification.json`です。同期t
 
 IDは一つの論理session history内の番号です。別sessionへ同じ番号が発行されることは許容されます。応答を発行元のhistoryへルーティングすること、同じsessionへの呼び出しを直列化することが前提です。Swiftのsession値をcopy/restoreして古いhistoryへ戻すことは、この前提での同じsession継続とは扱いません。IDは認証証明や秘密情報ではありません。
 
-Refreshing中のLogoutは、当初の明示仕様を維持して無視します。進行中refreshの無効化・キャンセルを今回の保証に含めません。これは先に提示した追加仕様候補への回答待ちの判断点です。実際の通信、資格情報置換、同時呼び出しの線形化可能性、活性は対象外です。Async TLCはCURRENT/STALEとpendingを抽象化し、IDの新鮮性・正しいルーティングを仮定するため、numeric allocatorやnative implementationのrefinement proofではありません。
+v3ではRefreshing中のLogoutを無視しました。現行v4は相関を無効化しますが、実際の通信キャンセルは行いません。実際の通信、資格情報置換、同時呼び出しの線形化可能性、活性は対象外です。Async TLCはCURRENT/STALEとpendingを抽象化し、IDの新鮮性・正しいルーティングを仮定するため、numeric allocatorやnative implementationのrefinement proofではありません。
 
 ## 次のステップ
 
 SwiftPM/Maven配布前には公開API互換性、実機統合、バージョン管理、署名と依存供給網を検討します。Correlation PoCは資格情報の置換、実際のrequest cancellation、並列呼び出し安全性、任意長の native trace refinement を保証しません。
+
+## Managed ownership and completed histories (v4)
+
+ManagedAsyncSession owns one low-level session through a Swift actor or a Kotlin private monitor. Both handle and snapshot share that serialization boundary. Responses accept an immutable RefreshRequest emitted by a refresh effect. A retained reference owner distinguishes legitimate tokens with the same numeric ID; a foreign token yields ForeignRequest and preserves the full snapshot. There is no public token construction, copy, restore or seed mutation. This claim covers ordinary external source clients, excluding reflection/unsafe/runtime attacks. Low-level AsyncSession still requires caller serialization and correct routing; Swift value copies are not one continuing managed history.
+
+```sh
+bash scripts/managed-verify.sh "$PWD/reports/managed-manual"
+python3 -m verification.linearizability --history actual.json --report checked.json
+python3 -m verification.numeric_model --output "$PWD/reports/numeric-manual"
+```
+
+The normal verify.sh gate includes managed histories, external API compile/runtime clients, native owner-guard mutants and the finite numeric model. Missing runners are NOT_RUN. Search exhaustion or missing observed concurrency is INCONCLUSIVE. Neither can yield full PASS; SKIP_MUTATIONS=1 remains incomplete.
+
+The [frozen history guide](docs/experiments/managed-history-format.md) defines an independent operation inventory, setup/snapshot calls, token Effect provenance and globally unique invocation/return timestamps across owners. The checker searches for a sequential witness preserving every return(A)<invoke(B) edge and exact state/pending/allocator, ordered effects, token owner/ID and rejection. Arbitrary Swift/Kotlin scheduling orders are checked separately. The finite numeric model exhausts two owners and IDs 1..3, comparing an independent reducer against the JSON oracle's full-state step. Ghost issued-ID sets are verification instrumentation, not native snapshot fields. Reset/owner mutants require concrete counterexamples. These finite checks do not prove all signed64 values, arbitrary concurrency or native refinement.
+
+The [design](docs/experiments/evolution-design.md), [approved plan](docs/experiments/evolution-plan.md) and [native brief](docs/experiments/managed-native-brief.md) fix evaluator boundaries before native edits. Evaluator revisions require a new manifest and re-evaluation of old-native semantic RED and candidates. This run is not a controlled comparison of model rankings or cost.

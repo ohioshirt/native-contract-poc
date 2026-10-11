@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "states": [
     "Unauthenticated",
     "Authenticated",
@@ -136,7 +136,7 @@
     "reusePolicy": "never",
     "overflowPolicy": "reject-before-mutation",
     "exhaustionRejection": "RequestIdExhausted",
-    "logoutWhileRefreshing": "ignore",
+    "logoutWhileRefreshing": "invalidate",
     "guardMismatch": "preserve-state-pending-counter-and-no-effects",
     "transitions": [
       {
@@ -236,10 +236,12 @@
       {
         "state": "Refreshing",
         "event": "Logout",
-        "nextState": "Refreshing",
-        "effects": [],
+        "nextState": "Unauthenticated",
+        "effects": [
+          "ClearCredentials"
+        ],
         "guard": "always",
-        "pendingAction": "preserve"
+        "pendingAction": "clear"
       },
       {
         "state": "Refreshing",

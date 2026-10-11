@@ -40,12 +40,15 @@ RejectAllocation(row) ==
 StaleResponse(row) ==
   Observe(state, pending, << >>, NoRejection, "STALE", row.event)
 
+SimpleApply(row) ==
+  Apply(row, "NA")
+
 SimpleStep ==
   \E row \in AsyncRows:
     /\ row.state = state
     /\ row.event \in SimpleEvents
     /\ row.guard = "always"
-    /\ (Apply(row, "NA") \/ (row.pendingAction = "allocate" /\ RejectAllocation(row)))
+    /\ (SimpleApply(row) \/ (row.pendingAction = "allocate" /\ RejectAllocation(row)))
 
 CurrentResponse(row) ==
   /\ row.state = state
@@ -85,6 +88,19 @@ RejectedAtomic ==
     /\ state = previousState
     /\ pending = previousPending
     /\ effects = << >>
+LogoutPolicy ==
+  (event = "Logout" /\ previousState = "Refreshing") =>
+    IF LogoutMode = "invalidate" THEN
+      /\ state = "Unauthenticated"
+      /\ pending = FALSE
+      /\ effects = << "ClearCredentials" >>
+      /\ rejection = NoRejection
+    ELSE
+      /\ state = "Refreshing"
+      /\ pending = previousPending
+      /\ effects = << >>
+      /\ rejection = NoRejection
+
 RowTransitionSound ==
   event = "__initial__" \/ rejection = ExhaustionRejection \/ responseClass = "STALE" \/
   \E row \in AsyncRows:
