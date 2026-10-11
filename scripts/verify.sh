@@ -6,8 +6,9 @@ mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 cd "$ROOT_DIR"
 export PYTHONPATH="$ROOT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPYCACHEPREFIX="$ROOT_DIR/.python-cache"
 owned=(scenarios.json swift-traces.json kotlin-traces.json summary.json summary.md report.md git-sha.txt git-dirty.txt contract-sha256.txt swift-version.txt xcode-version.txt java-version.txt kotlin-version.txt python-version.txt)
-for gate in python-tests formal-verify async-formal-verify swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner differential native-differential mutations async-runner async-mutations managed-verify; do
+for gate in python-tests formal-verify async-formal-verify swift-build swift-availability swift-test kotlin-build contract-generate swift-runner kotlin-runner differential native-differential mutations async-runner async-mutations managed-verify; do
   owned+=("$gate.exit-code" "$gate.stdout.log" "$gate.stderr.log" "$gate.command.log")
 done
 for file in "${owned[@]}"; do rm -f "$OUT_DIR/$file"; done
@@ -30,22 +31,31 @@ run() {
   if [ "$code" -ne 0 ]; then overall=1; fi
   return 0
 }
+not_run() {
+  name="$1"; reason="$2"
+  printf 'not run: %s\n' "$reason" > "$OUT_DIR/$name.command.log"
+  printf 'NOT_RUN: %s\n' "$reason" > "$OUT_DIR/$name.stdout.log"
+  : > "$OUT_DIR/$name.stderr.log"
+  echo 125 > "$OUT_DIR/$name.exit-code"
+  overall=1
+}
 run python-tests python3 -m unittest discover -s verification -p 'test_*.py' -v
 run formal-verify bash scripts/formal-verify.sh "$FORMAL_OUT_DIR"
 run async-formal-verify bash scripts/async-formal-verify.sh "$ASYNC_FORMAL_OUT_DIR"
-run swift-build swift build --package-path ios
-run swift-test swift test --package-path ios
+run swift-build swift build --package-path ios --cache-path "$ROOT_DIR/.swift-cache/swiftpm" --manifest-cache local --disable-dependency-cache
+run swift-availability bash scripts/swift-availability-check.sh "$OUT_DIR/swift-availability"
+run swift-test swift test --package-path ios --cache-path "$ROOT_DIR/.swift-cache/swiftpm" --manifest-cache local --disable-dependency-cache
 run kotlin-build ./android/gradlew -p android build :library:installDist :async-library:installDist
 run contract-generate python3 verification/generate.py --wire-input --output "$OUT_DIR/scenarios.json"
 if [ "$(cat "$OUT_DIR/swift-build.exit-code")" = 0 ]; then
   run swift-runner bash -c 'ios/.build/debug/TraceRunner < "$1" > "$2"' _ "$OUT_DIR/scenarios.json" "$OUT_DIR/swift-traces.json"
-else echo 'Swift runner not attempted: build failed' > "$OUT_DIR/swift-runner.stderr.log"; echo 125 > "$OUT_DIR/swift-runner.exit-code"; overall=1; fi
+else not_run swift-runner "Swift build failed"; fi
 if [ "$(cat "$OUT_DIR/kotlin-build.exit-code")" = 0 ]; then
   run kotlin-runner bash -c 'android/library/build/install/library/bin/library < "$1" > "$2"' _ "$OUT_DIR/scenarios.json" "$OUT_DIR/kotlin-traces.json"
-else echo 'Kotlin runner not attempted: build failed' > "$OUT_DIR/kotlin-runner.stderr.log"; echo 125 > "$OUT_DIR/kotlin-runner.exit-code"; overall=1; fi
+else not_run kotlin-runner "Kotlin build failed"; fi
 if [ "$(cat "$OUT_DIR/swift-build.exit-code")" = 0 ] && [ "$(cat "$OUT_DIR/kotlin-build.exit-code")" = 0 ]; then
   run async-runner bash scripts/async-verify.sh "$OUT_DIR/async"
-else echo 'Async runners not attempted: one or both builds failed' > "$OUT_DIR/async-runner.stderr.log"; echo 125 > "$OUT_DIR/async-runner.exit-code"; overall=1; fi
+else not_run async-runner "one or both builds failed"; fi
 run managed-verify bash scripts/managed-verify.sh "$MANAGED_OUT_DIR"
 verify_args=(python3 verification/verify.py --report "$OUT_DIR/summary.json" --markdown "$OUT_DIR/summary.md")
 if [ -f "$OUT_DIR/swift-traces.json" ]; then verify_args+=(--swift "$OUT_DIR/swift-traces.json"); fi
@@ -54,11 +64,7 @@ run differential "${verify_args[@]}"
 if [ -f "$OUT_DIR/swift-traces.json" ] && [ -f "$OUT_DIR/kotlin-traces.json" ]; then
   run native-differential python3 verification/compare.py --left "$OUT_DIR/swift-traces.json" --right "$OUT_DIR/kotlin-traces.json"
 else
-  echo 'not run: one or both runner traces are unavailable' > "$OUT_DIR/native-differential.command.log"
-  echo 'NOT_RUN: one or both runner traces are unavailable' > "$OUT_DIR/native-differential.stdout.log"
-  : > "$OUT_DIR/native-differential.stderr.log"
-  echo 125 > "$OUT_DIR/native-differential.exit-code"
-  overall=1
+  not_run native-differential "one or both runner traces are unavailable"
 fi
 if [ "${SKIP_MUTATIONS:-0}" = "1" ]; then
   mutation_skipped=1
@@ -80,7 +86,7 @@ grep -E 'kotlin\("jvm"\) version' android/build.gradle.kts > "$OUT_DIR/kotlin-ve
 if [ "$overall" -ne 0 ]; then echo 'Overall: FAIL' > "$OUT_DIR/report.md"
 elif [ "$mutation_skipped" -eq 1 ]; then echo 'Overall: INCOMPLETE (mutation matrix NOT_RUN)' > "$OUT_DIR/report.md"
 else echo 'Overall: PASS' > "$OUT_DIR/report.md"; fi
-for name in python-tests formal-verify async-formal-verify swift-build swift-test kotlin-build contract-generate swift-runner kotlin-runner async-runner differential native-differential mutations async-mutations managed-verify; do
+for name in python-tests formal-verify async-formal-verify swift-build swift-availability swift-test kotlin-build contract-generate swift-runner kotlin-runner async-runner differential native-differential mutations async-mutations managed-verify; do
   printf '\n## %s (exit %s)\n' "$name" "$(cat "$OUT_DIR/$name.exit-code" 2>/dev/null || echo unknown)" >> "$OUT_DIR/report.md"
   printf '\nCommand: ' >> "$OUT_DIR/report.md"; cat "$OUT_DIR/$name.command.log" >> "$OUT_DIR/report.md"
   printf '\nstdout tail:\n```\n' >> "$OUT_DIR/report.md"; tail -n 10 "$OUT_DIR/$name.stdout.log" >> "$OUT_DIR/report.md" 2>/dev/null || true

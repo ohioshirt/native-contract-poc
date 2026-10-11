@@ -114,7 +114,7 @@ def main():
                 if gen: raise RuntimeError(f"{case['id']}: oracle input generation failed")
                 actual = {}
                 for language, build, runner in (
-                        ("swift", "swift build --package-path ios", "ios/.build/debug/TraceRunner < {input} > {output}"),
+                        ("swift", "swift build --package-path ios --cache-path "+shlex.quote(str(ROOT / ".swift-cache/swiftpm"))+" --manifest-cache local --disable-dependency-cache", "ios/.build/debug/TraceRunner < {input} > {output}"),
                         ("kotlin", "./android/gradlew -p android :library:assemble :library:installDist", "android/library/build/install/library/bin/library < {input} > {output}")):
                     build_status = execute(f"{language}-build", build, work, case_dir)
                     if build_status: raise RuntimeError(f"{case['id']}: {language} build failed (infrastructure failure)")

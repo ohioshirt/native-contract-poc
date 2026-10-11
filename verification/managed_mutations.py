@@ -40,7 +40,7 @@ def run(root, out):
             (candidate/mutation['file']).write_text(changed)
             env = os.environ.copy();env.setdefault('GRADLE_USER_HOME',str(root/'.gradle-home'))
             env.setdefault('CLANG_MODULE_CACHE_PATH',str(root/'.swift-cache/clang'));env.setdefault('SWIFTPM_MODULECACHE_OVERRIDE',str(root/'.swift-cache/modules'))
-            build_argv = ['swift','build','--package-path',str(candidate/'ios'),'--product','ManagedHistoryRunner'] if platform == 'swift' else [str(candidate/'android/gradlew'),'-p',str(candidate/'android'),'--no-daemon',':async-library:installDist']
+            build_argv = ['swift','build','--package-path',str(candidate/'ios'),'--product','ManagedHistoryRunner','--cache-path',str(root/'.swift-cache/swiftpm'),'--manifest-cache','local','--disable-dependency-cache'] if platform == 'swift' else [str(candidate/'android/gradlew'),'-p',str(candidate/'android'),'--no-daemon',':async-library:installDist']
             build = capture(build_argv,dest,'build',cwd=candidate,env=env,timeout=240);record['build'] = build
             command = runner(candidate,platform) if build['exitCode']==0 else None
             if command is None:

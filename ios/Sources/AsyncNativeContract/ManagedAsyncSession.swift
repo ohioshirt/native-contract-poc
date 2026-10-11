@@ -43,6 +43,7 @@ public struct ManagedResult: Sendable {
 }
 
 /// One authoritative session. Each complete reduction and snapshot is actor isolated.
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 public actor ManagedAsyncSession {
     private let owner = RequestOwner()
     private var session: AsyncSession

@@ -10,3 +10,5 @@ verification/__pycache__/
 android/verification-logs/
 docs/experiments/control-location.json
 .formal-cache/
+
+.python-cache/

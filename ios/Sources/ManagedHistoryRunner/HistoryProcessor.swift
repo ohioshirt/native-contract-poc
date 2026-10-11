@@ -118,6 +118,7 @@ private final class Recorder: @unchecked Sendable {
 }
 
 /// Every phase caller must arrive before any caller is released to invoke the API.
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 private actor StartBarrier {
     private var remaining: Int
     private var waiting: [CheckedContinuation<Void, Never>] = []
@@ -138,6 +139,7 @@ private struct StoredToken: Sendable {
 }
 
 /// A token is published only after the producing API return has been stamped.
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 private actor CompletionStore {
     private var completed: Set<String> = []
     private var tokens: [String: [Int: StoredToken]] = [:]
@@ -177,6 +179,7 @@ private actor CompletionStore {
     }
 }
 
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 enum ManagedHistoryProcessor {
     static func process(_ data: Data) async throws -> Data {
         let workload = try JSONDecoder().decode(Workload.self, from: data)
@@ -347,6 +350,7 @@ enum ManagedHistoryProcessor {
     }
 }
 
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 private extension Optional {
     func asyncMap<T>(_ transform: (Wrapped) async throws -> T) async rethrows -> T? {
         switch self {

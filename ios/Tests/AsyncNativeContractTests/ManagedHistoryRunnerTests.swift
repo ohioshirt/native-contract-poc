@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import ManagedHistoryRunner
 
+@available(macOS 10.15, iOS 13, tvOS 13, watchOS 6, *)
 @MainActor
 final class ManagedHistoryRunnerTests: XCTestCase {
     // Floating-point conversion, missing setup rows or forged tokens break these observations.

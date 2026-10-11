@@ -56,7 +56,7 @@ def run_case(case, case_dir):
             count = source.count(patch["before"])
             if count != 1: raise RuntimeError(f"{case['id']}: patch site in {patch['file']} matched {count}, expected 1")
             path.write_text(source.replace(patch["before"], patch["after"], 1))
-        swift_status = record("swift-build", ["swift", "build", "--package-path", "ios"], work, case_dir)
+        swift_status = record("swift-build", ["swift", "build", "--package-path", "ios", "--cache-path", str(ROOT / ".swift-cache/swiftpm"), "--manifest-cache", "local", "--disable-dependency-cache"], work, case_dir)
         if swift_status: raise RuntimeError("Swift async mutation build failed (infrastructure failure)")
         kotlin_status = record("kotlin-build", ["./android/gradlew", "-p", "android", ":async-library:installDist"], work, case_dir)
         if kotlin_status: raise RuntimeError("Kotlin async mutation build failed (infrastructure failure)")
