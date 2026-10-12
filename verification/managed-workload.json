@@ -179,6 +179,126 @@
           "after": []
         },
         {
+          "id": "logout-extra-01",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "logout-extra-02",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "logout-extra-03",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "logout-extra-04",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "logout-extra-05",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "response-extra-01",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "response-extra-02",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "response-extra-03",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "response-extra-04",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "response-extra-05",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshSucceeded",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
           "id": "final",
           "owner": "A",
           "kind": "snapshot",
@@ -250,6 +370,126 @@
           "kind": "snapshot",
           "phase": 2,
           "after": []
+        },
+        {
+          "id": "logout-extra-01",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "logout-extra-02",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "logout-extra-03",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "logout-extra-04",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "logout-extra-05",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "Logout"
+          }
+        },
+        {
+          "id": "response-extra-01",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "response-extra-02",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "response-extra-03",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "response-extra-04",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
+        },
+        {
+          "id": "response-extra-05",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 2,
+          "after": [],
+          "event": {
+            "event": "RefreshFailed",
+            "tokenRef": {
+              "operationId": "issue",
+              "effectIndex": 0
+            }
+          }
         },
         {
           "id": "final",

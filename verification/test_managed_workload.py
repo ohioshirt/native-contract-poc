@@ -20,3 +20,22 @@ class ManagedWorkloadTests(unittest.TestCase):
         self.assertTrue(all(not o['after'] for o in callers))
         self.assertEqual(sum(o['kind'] == 'snapshot' for o in callers), 1)
         self.assertTrue(all(o['event']['event'] == 'TokenExpired' for o in callers if o['kind'] == 'handle'))
+
+    def test_logout_response_phases_retain_original_calls_and_add_real_auth_callers(self):
+        workload = json.loads((ROOT/'verification/managed-workload.json').read_text())
+        validate_workload(workload)
+        for name, response in [('logout-vs-success', 'RefreshSucceeded'), ('logout-vs-failure', 'RefreshFailed')]:
+            with self.subTest(scenario=name):
+                scenario = next(s for s in workload['scenarios'] if s['id'] == name)
+                self.assertEqual(len(scenario['operations']), 16)
+                rows = {o['id']: o for o in scenario['operations']}
+                self.assertTrue({'login', 'issue', 'logout', 'response', 'during', 'final'} <= rows.keys())
+                callers = [o for o in scenario['operations'] if o['phase'] == 2]
+                self.assertEqual(sum(o['kind'] == 'snapshot' for o in callers), 1)
+                self.assertTrue(all(not o['after'] for o in callers))
+                for o in callers:
+                    if o['kind'] != 'handle':
+                        continue
+                    self.assertIn(o['event']['event'], ('Logout', response))
+                    if o['event']['event'] == response:
+                        self.assertEqual(o['event']['tokenRef'], {'operationId': 'issue', 'effectIndex': 0})

@@ -108,12 +108,16 @@ class HistoryChecks(unittest.TestCase):
         self.assertEqual(self.check()['verdict'], 'INCONCLUSIVE')
     def test_legal_overlap_can_reorder(self):
         source = copy.deepcopy(self.workload['scenarios'][1])
+        # This control tests a specific six-call reorder, with a matching declared inventory.
+        source['operations'] = [o for o in source['operations'] if o['id'] in {'login','issue','logout','response','during','final'}]
         w = {'version':1,'scenarios':[source]}
         self.workload, self.history = fixture(w, ['login','issue','response','during','logout','final'])
         self.assertEqual(self.check()['verdict'], 'PASS')
         self.assertIn('response', self.check()['histories'][0]['witness'])
     def test_real_time_forbids_required_reorder(self):
         source = copy.deepcopy(self.workload['scenarios'][1])
+        # This control tests a specific six-call reorder, with a matching declared inventory.
+        source['operations'] = [o for o in source['operations'] if o['id'] in {'login','issue','logout','response','during','final'}]
         self.workload, self.history = fixture({'version':1,'scenarios':[source]}, ['login','issue','response','during','logout','final'])
         rows = {o['id']:o for o in self.history['histories'][0]['operations']}
         rows['logout']['invoke'], rows['logout']['return'] = 5, 6
