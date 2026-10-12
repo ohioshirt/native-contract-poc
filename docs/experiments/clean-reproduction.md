@@ -53,3 +53,9 @@ OK
 ```
 
 These are local regression records, not hosted workflow or clean-clone acceptance. Full execution evidence is generated independently per run by the entry point.
+
+## Observed concurrency and scheduler variability
+
+A start barrier creates live callers but cannot guarantee overlapping API invocation intervals on every scheduler. Unit tests therefore accept either a complete observed overlap trial or the final complete trial after the specified 20-trial budget. A deterministic same-phase dependency-chain test checks that the runner retains trial 19 and strict real-time order without fabricating overlap. The external gate continues to classify insufficient observed overlap as INCONCLUSIVE, never PASS.
+
+The independently frozen simultaneous-expiration workload retains both expiration calls and its original snapshots, adding independent TokenExpired callers within the 16-operation bound, while retaining exactly one snapshot in that phase. Any overlapping pair therefore contains an expiration call. More actual callers improve the chance of observing real concurrency without moving invocation stamps, inserting waits inside measured call intervals, changing API behavior or weakening the checker. Scheduler determinism is still not claimed. All attempts, including insufficient-coverage attempts, remain evidence.

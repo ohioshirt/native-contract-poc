@@ -430,6 +430,116 @@
           "after": []
         },
         {
+          "id": "expire-extra-01",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-02",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-03",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-04",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-05",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-06",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-07",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-08",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-09",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-10",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
+          "id": "expire-extra-11",
+          "owner": "A",
+          "kind": "handle",
+          "phase": 1,
+          "after": [],
+          "event": {
+            "event": "TokenExpired"
+          }
+        },
+        {
           "id": "final",
           "owner": "A",
           "kind": "snapshot",

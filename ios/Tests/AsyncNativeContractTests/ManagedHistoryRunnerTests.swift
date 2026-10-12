@@ -33,8 +33,9 @@ final class ManagedHistoryRunnerTests: XCTestCase {
         XCTAssertTrue(final["rejection"] is NSNull)
     }
 
-    // Serial synthesis or starting the clock after the barrier would miss required live overlap.
-    func testConcurrentPhaseRetainsOneWholeTrialAndObservedOverlap() async throws {
+    // Scheduling may serialize short calls. The runner returns an observed overlap trial
+    // or the final complete trial; the independent gate rejects insufficient overlap.
+    func testConcurrentPhaseRetainsOneWholeTrialWithOverlapOrExhaustedBudget() async throws {
         let input = #"{"version":1,"scenarios":[{"id":"parallel","seed":0,"owners":[{"id":"A","nextRequestId":1}],"concurrentPhases":[1],"operations":[{"id":"login","owner":"A","kind":"handle","phase":0,"after":[],"event":{"event":"LoginSucceeded"}},{"id":"one","owner":"A","kind":"handle","phase":1,"after":[],"event":{"event":"TokenExpired"}},{"id":"two","owner":"A","kind":"handle","phase":1,"after":[],"event":{"event":"TokenExpired"}},{"id":"view","owner":"A","kind":"snapshot","phase":1,"after":[]}]}]}"#
         let output = try await ManagedHistoryProcessor.process(Data(input.utf8))
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: output) as? [String: Any])
@@ -44,9 +45,30 @@ final class ManagedHistoryRunnerTests: XCTestCase {
         let rows = try XCTUnwrap(history["operations"] as? [[String: Any]])
         XCTAssertEqual(Set(rows.map { $0["id"] as! String }), ["login", "one", "two", "view"])
         let parallel = rows.filter { ($0["phase"] as? Int) == 1 }
-        XCTAssertTrue(parallel.enumerated().contains { i,a in parallel.dropFirst(i+1).contains { b in
+        let overlaps = parallel.enumerated().contains { i,a in parallel.dropFirst(i+1).contains { b in
             (a["invoke"] as! Int) < (b["return"] as! Int) && (b["invoke"] as! Int) < (a["return"] as! Int)
-        } })
+        } }
+        if !overlaps { XCTAssertEqual(history["trial"] as? Int, 19) }
+        let stamps = rows.flatMap { [$0["invoke"] as! Int, $0["return"] as! Int] }
+        XCTAssertEqual(Set(stamps).count, stamps.count)
+    }
+
+    // Same-phase dependency waits happen before invocation stamps, so overlap is impossible.
+    // The runner must retain the final complete trial rather than manufacture coverage.
+    func testSerializedConcurrentPhaseRetainsFinalTrialWithoutFabricatedOverlap() async throws {
+        let input = #"{"version":1,"scenarios":[{"id":"serialized","seed":0,"owners":[{"id":"A","nextRequestId":1}],"concurrentPhases":[1],"operations":[{"id":"login","owner":"A","kind":"handle","phase":0,"after":[],"event":{"event":"LoginSucceeded"}},{"id":"one","owner":"A","kind":"handle","phase":1,"after":[],"event":{"event":"TokenExpired"}},{"id":"two","owner":"A","kind":"handle","phase":1,"after":["one"],"event":{"event":"TokenExpired"}},{"id":"view","owner":"A","kind":"snapshot","phase":1,"after":["two"]}]}]}"#
+        let output = try await ManagedHistoryProcessor.process(Data(input.utf8))
+        let document = try XCTUnwrap(JSONSerialization.jsonObject(with: output) as? [String: Any])
+        let histories = try XCTUnwrap(document["histories"] as? [[String: Any]])
+        let history = try XCTUnwrap(histories.first)
+        XCTAssertEqual(history["trial"] as? Int, 19)
+        let rows = try XCTUnwrap(history["operations"] as? [[String: Any]])
+        XCTAssertEqual(rows.count, 4)
+        let byID = Dictionary(uniqueKeysWithValues: rows.map { ($0["id"] as! String, $0) })
+        XCTAssertEqual(Set(byID.keys), ["login", "one", "two", "view"])
+        for (a, b) in [("login", "one"), ("one", "two"), ("two", "view")] {
+            XCTAssertLessThan(byID[a]!["return"] as! Int, byID[b]!["invoke"] as! Int)
+        }
         let stamps = rows.flatMap { [$0["invoke"] as! Int, $0["return"] as! Int] }
         XCTAssertEqual(Set(stamps).count, stamps.count)
     }
