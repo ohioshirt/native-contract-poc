@@ -278,6 +278,8 @@ jobs:
           "$SDKMANAGER" --install \
             'platform-tools' 'emulator' 'platforms;android-35' 'build-tools;35.0.0' \
             'system-images;android-35;google_apis;x86_64'
+          # The controller invokes `adb` by name in later steps.
+          printf '%s\n' "$ANDROID_SDK_ROOT/platform-tools" "$ANDROID_SDK_ROOT/emulator" >> "$GITHUB_PATH"
 
       - name: Read frozen output root and prepare logs
         shell: bash
