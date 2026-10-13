@@ -17,6 +17,8 @@ from verification import change_protocol
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# reports/ is untracked, so a fresh clone (CI) has no temporary-directory parent yet.
+(ROOT / "reports" / "standalone").mkdir(parents=True, exist_ok=True)
 BASELINE = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 
 

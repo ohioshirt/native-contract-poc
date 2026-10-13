@@ -8,6 +8,8 @@ from integration.mutations import MutationError, apply_mutation, validate_contro
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# reports/ is untracked, so a fresh clone (CI) has no temporary-directory parent yet.
+(ROOT / "reports" / "standalone").mkdir(parents=True, exist_ok=True)
 MATRIX_PATH = ROOT / "integration" / "mutation_matrix.json"
 
 

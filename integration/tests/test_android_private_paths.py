@@ -12,6 +12,8 @@ from integration import controller
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# reports/ is untracked, so a fresh clone (CI) has no temporary-directory parent yet.
+(ROOT / "reports" / "standalone").mkdir(parents=True, exist_ok=True)
 PACKAGE = "dev.nativecontract.demo.android"
 PROCESS_ID = "attempt-01/APP-02/p1"
 NATIVE_ROOT = "no_backup/native-harness/attempt-01/APP-02/p1"

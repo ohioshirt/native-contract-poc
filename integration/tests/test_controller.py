@@ -15,6 +15,8 @@ from integration.tests._history_fixtures import make_app02_trace
 
 
 ROOT = Path(__file__).resolve().parents[2]
+# reports/ is untracked, so a fresh clone (CI) has no temporary-directory parent yet.
+(ROOT / "reports" / "standalone").mkdir(parents=True, exist_ok=True)
 
 
 def synthetic_local_device_scope(root: Path):
