@@ -320,6 +320,14 @@ def _suite_ledger(root, candidate, manifest, manifest_digest, expected_platform,
         or [row.get("stageId") for row in suite["stageResults"] if isinstance(row, dict)] != expected_stages
     ):
         raise AggregateError(f"{expected_platform} suite report is incomplete or bound to another run")
+    for row in suite["stageResults"]:
+        skipped = row.get("skippedAfter") if isinstance(row, dict) else None
+        if skipped is not None:
+            after = skipped.get("stageId") if isinstance(skipped, dict) else None
+            cause = skipped.get("classification") if isinstance(skipped, dict) else None
+            raise AggregateError(
+                f"{expected_platform} stage {row['stageId']} was not run: skipped after {after} {cause}"
+            )
     _verify_ledger_root(root, suite, manifest_digest, candidate_digest, expected_stages, expected_platform)
 
     checked = {}

@@ -8,6 +8,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      continue_after_failure:
+        description: Run every frozen stage even after an infrastructure failure (diagnosis only)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,6 +27,7 @@ jobs:
     name: Protected evaluator and frozen source manifest
     if: github.event.action != 'labeled' || github.event.label.name == 'native-ci'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -99,6 +105,9 @@ jobs:
       (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'native-ci'))
     needs: evaluator-and-freeze
     runs-on: macos-15
+    # Provisional: no full iOS run has completed yet (an 87.7-minute run stopped at the
+    # 30-minute candidate stage limit). Tighten once a complete run is measured.
+    timeout-minutes: 180
     env:
       RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
       NATIVE_CONTRACT_OUTPUT_ROOT: reports/standalone/attempts/ci-${{ github.run_id }}-${{ github.run_attempt }}-manifest
@@ -183,6 +192,8 @@ jobs:
 
       - name: Run iOS-bound frozen stages
         shell: bash
+        env:
+          CONTINUE_FLAG: ${{ inputs.continue_after_failure && '--continue-after-failure' || '' }}
         run: |
           set -euo pipefail
           manifest="$GITHUB_WORKSPACE/reports/standalone/${RUN_LABEL}-manifest/manifest.json"
@@ -190,6 +201,12 @@ jobs:
           test -s "$manifest"
           test -s "$digest_file"
           manifest_digest="$(cat "$digest_file")"
+          # Stage evidence stays in files; progress lines (stage, build, case and command
+          # start/end with elapsed seconds) stream into this log while the stages run.
+          export NATIVE_CONTRACT_PROGRESS_LOG="$RUNNER_TEMP/native-contract-ios/progress.log"
+          : > "$NATIVE_CONTRACT_PROGRESS_LOG"
+          tail -n +1 -f "$NATIVE_CONTRACT_PROGRESS_LOG" &
+          progress_tail=$!
           set +e
           python -m integration.reproduce run-stages \
             --candidate "$GITHUB_WORKSPACE" \
@@ -197,12 +214,20 @@ jobs:
             --manifest "$manifest" \
             --manifest-digest "$manifest_digest" \
             --stage integration-red --stage candidate-ios \
-            --stage integration-controls --stage legacy-full \
+            --stage integration-controls --stage legacy-full ${CONTINUE_FLAG:-} \
             > "$RUNNER_TEMP/native-contract-ios/stages.stdout.log" \
             2> "$RUNNER_TEMP/native-contract-ios/stages.stderr.log"
           stage_status=$?
+          sleep 1
+          kill "$progress_tail" 2>/dev/null
+          suite_report="$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT/suite-report.json"
+          if [[ -s "$suite_report" ]]; then
+            python -m integration.progress summary "$suite_report" --title "iOS ledger" >> "$GITHUB_STEP_SUMMARY"
+          fi
           set -e
           if [[ "$stage_status" -ne 0 && "$stage_status" -ne 3 ]]; then
+            echo "::error title=iOS ledger::run-stages exited $stage_status; stderr tail follows"
+            tail -n 40 "$RUNNER_TEMP/native-contract-ios/stages.stderr.log" || true
             exit "$stage_status"
           fi
 
@@ -255,6 +280,8 @@ jobs:
       (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'native-ci'))
     needs: evaluator-and-freeze
     runs-on: ubuntu-24.04
+    # Provisional: a complete Android ledger measured 10.7 minutes.
+    timeout-minutes: 45
     env:
       RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
       NATIVE_CONTRACT_OUTPUT_ROOT: reports/standalone/attempts/ci-${{ github.run_id }}-${{ github.run_attempt }}-manifest
@@ -338,6 +365,7 @@ jobs:
         shell: bash
         env:
           GRADLE_USER_HOME: ${{ runner.temp }}/native-contract-gradle-home
+          CONTINUE_FLAG: ${{ inputs.continue_after_failure && '--continue-after-failure' || '' }}
         run: |
           set -euo pipefail
           manifest="$GITHUB_WORKSPACE/reports/standalone/${RUN_LABEL}-manifest/manifest.json"
@@ -345,18 +373,32 @@ jobs:
           test -s "$manifest"
           test -s "$digest_file"
           manifest_digest="$(cat "$digest_file")"
+          # Stage evidence stays in files; progress lines (stage, build, case and command
+          # start/end with elapsed seconds) stream into this log while the stages run.
+          export NATIVE_CONTRACT_PROGRESS_LOG="$RUNNER_TEMP/native-contract-android/progress.log"
+          : > "$NATIVE_CONTRACT_PROGRESS_LOG"
+          tail -n +1 -f "$NATIVE_CONTRACT_PROGRESS_LOG" &
+          progress_tail=$!
           set +e
           python -m integration.reproduce run-stages \
             --candidate "$GITHUB_WORKSPACE" \
             --output "$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT" \
             --manifest "$manifest" \
             --manifest-digest "$manifest_digest" \
-            --stage candidate-android --stage integration-controls \
+            --stage candidate-android --stage integration-controls ${CONTINUE_FLAG:-} \
             > "$RUNNER_TEMP/native-contract-android/stages.stdout.log" \
             2> "$RUNNER_TEMP/native-contract-android/stages.stderr.log"
           stage_status=$?
+          sleep 1
+          kill "$progress_tail" 2>/dev/null
+          suite_report="$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT/suite-report.json"
+          if [[ -s "$suite_report" ]]; then
+            python -m integration.progress summary "$suite_report" --title "Android ledger" >> "$GITHUB_STEP_SUMMARY"
+          fi
           set -e
           if [[ "$stage_status" -ne 0 && "$stage_status" -ne 3 ]]; then
+            echo "::error title=Android ledger::run-stages exited $stage_status; stderr tail follows"
+            tail -n 40 "$RUNNER_TEMP/native-contract-android/stages.stderr.log" || true
             exit "$stage_status"
           fi
 
@@ -407,6 +449,7 @@ jobs:
       (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'native-ci'))
     needs: [evaluator-and-freeze, ios-native, android-native]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:

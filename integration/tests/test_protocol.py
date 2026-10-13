@@ -109,6 +109,23 @@ class ProtocolConfigurationTests(unittest.TestCase):
             with self.subTest(job=job):
                 self.assertIn("github.event.action != 'labeled' || github.event.label.name == 'native-ci'", header)
 
+    def test_ci_workflows_bound_every_job_and_stream_stage_progress(self):
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            workflow = path.read_text()
+            jobs = re.split(r"(?m)^  (?=[a-z-]+:$)", workflow[workflow.index("\njobs:\n"):])[1:]
+            for block in jobs:
+                with self.subTest(workflow=path.name, job=block.split(":", 1)[0]):
+                    header = block.split("\n    steps:", 1)[0]
+                    self.assertRegex(header, r"\n    timeout-minutes: [1-9][0-9]*(\n|$)")
+        workflow = (ROOT / ".github" / "workflows" / "integration.yml").read_text()
+        for platform in ("ios", "android"):
+            with self.subTest(platform=platform):
+                self.assertIn(f'export NATIVE_CONTRACT_PROGRESS_LOG="$RUNNER_TEMP/native-contract-{platform}/progress.log"', workflow)
+        self.assertEqual(workflow.count('python -m integration.progress summary "$suite_report"'), 2)
+        self.assertEqual(workflow.count(">> \"$GITHUB_STEP_SUMMARY\""), 2)
+        self.assertEqual(workflow.count("CONTINUE_FLAG: ${{ inputs.continue_after_failure && '--continue-after-failure' || '' }}"), 2)
+        self.assertIn("continue_after_failure:\n        description:", workflow)
+
     def test_ci_workflow_runs_the_frozen_full_gate_and_cleans_only_owned_devices(self):
         workflow = (ROOT / ".github" / "workflows" / "integration.yml").read_text()
         self.assertIn("native-acceptance:", workflow)
@@ -589,6 +606,107 @@ class ReproduceWrapperTests(unittest.TestCase):
             self.assertEqual(report["selectedStages"], ["candidate-ios"])
             self.assertEqual(report["classification"], "PASS")
             self.assertEqual(report["stageResults"][0]["bindingClassification"], "PASS")
+
+    def _run_stages_with(self, outcomes, *, stages, continue_after_failure=False):
+        """Run the real run_stages with a stubbed per-stage protocol run."""
+        with tempfile.TemporaryDirectory(dir=ROOT / "reports" / "standalone") as directory:
+            temporary = Path(directory)
+            frozen = reproduce.freeze(ROOT, temporary / ("freeze-" + temporary.name))
+            manifest_path = Path(frozen["manifest"])
+            output = ROOT / json.loads(manifest_path.read_text())["outputRoot"]
+            self.addCleanup(shutil.rmtree, output, ignore_errors=True)
+            output.mkdir(parents=True)
+            (output / ".manifest-digest").write_text(frozen["manifestDigest"] + "\n")
+            progress = temporary / "progress.log"
+            calls = []
+
+            def run_one(candidate, manifest, digest, stage_id, attempt_id):
+                calls.append(stage_id)
+                directory = output / attempt_id
+                directory.mkdir(parents=True)
+                (directory / "result.json").write_text("{}\n")
+                classification, timed_out = outcomes[stage_id]
+                return {
+                    "classification": classification,
+                    "stageId": stage_id,
+                    "attemptId": attempt_id,
+                    "outputDirectory": str(directory),
+                    "timedOut": timed_out,
+                    "durationSeconds": 1.5,
+                    "detail": f"{stage_id} detail",
+                }
+
+            with patch.dict(os.environ, {"NATIVE_CONTRACT_PROGRESS_LOG": str(progress)}), \
+                    patch("integration.reproduce.run_one", side_effect=run_one), \
+                    patch("integration.reproduce.check", return_value={"classification": "PASS", "bindingClassification": "PASS"}):
+                report = reproduce.run_stages(
+                    candidate=ROOT,
+                    output=output,
+                    stages=stages,
+                    manifest=manifest_path,
+                    manifest_digest=frozen["manifestDigest"],
+                    continue_after_failure=continue_after_failure,
+                )
+            owner = json.loads((output / "ledger-owner.json").read_text())
+            return report, calls, progress.read_text(), owner
+
+    IOS_STAGES = ["integration-red", "candidate-ios", "integration-controls", "legacy-full"]
+
+    def test_run_stages_stops_after_an_infra_failure_and_records_skipped_stages(self):
+        report, calls, progress, owner = self._run_stages_with(
+            {
+                "integration-red": ("SEMANTIC_FAIL", False),
+                "candidate-ios": ("INFRA_FAILURE", True),
+                "integration-controls": ("PASS", False),
+                "legacy-full": ("PASS", False),
+            },
+            stages=self.IOS_STAGES,
+        )
+
+        # integration-red's expected semantic failure does not stop the ledger.
+        self.assertEqual(calls, ["integration-red", "candidate-ios"])
+        self.assertEqual(report["classification"], "INFRA_FAILURE")
+        self.assertEqual([row["stageId"] for row in report["stageResults"]], self.IOS_STAGES)
+        skipped = report["stageResults"][2:]
+        for row in skipped:
+            self.assertEqual(row["classification"], "NOT_RUN")
+            self.assertEqual(row["acceptanceClassification"], "NOT_RUN")
+            self.assertEqual(row["skippedAfter"], {"stageId": "candidate-ios", "classification": "INFRA_FAILURE", "timedOut": True})
+        self.assertEqual(owner["attemptIds"], ["auto-integration-red", "auto-candidate-ios"])
+        self.assertIn("stage-start stage=candidate-ios index=2/4", progress)
+        self.assertIn("stage-end stage=candidate-ios classification=INFRA_FAILURE timedOut=true", progress)
+        self.assertIn("stage-skip stage=integration-controls after=candidate-ios", progress)
+        self.assertIn("stage-skip stage=legacy-full after=candidate-ios", progress)
+
+    def test_run_stages_runs_every_stage_when_asked_to_continue_for_diagnosis(self):
+        report, calls, _, owner = self._run_stages_with(
+            {
+                "integration-red": ("SEMANTIC_FAIL", False),
+                "candidate-ios": ("INFRA_FAILURE", True),
+                "integration-controls": ("PASS", False),
+                "legacy-full": ("PASS", False),
+            },
+            stages=self.IOS_STAGES,
+            continue_after_failure=True,
+        )
+
+        self.assertEqual(calls, self.IOS_STAGES)
+        self.assertFalse(any("skippedAfter" in row for row in report["stageResults"]))
+        self.assertEqual(len(owner["attemptIds"]), 4)
+
+    def test_run_stages_does_not_stop_on_a_semantic_failure(self):
+        report, calls, _, _ = self._run_stages_with(
+            {
+                "integration-red": ("SEMANTIC_FAIL", False),
+                "candidate-ios": ("SEMANTIC_FAIL", False),
+                "integration-controls": ("PASS", False),
+                "legacy-full": ("PASS", False),
+            },
+            stages=self.IOS_STAGES,
+        )
+
+        self.assertEqual(calls, self.IOS_STAGES)
+        self.assertEqual(report["classification"], "SEMANTIC_FAIL")
 
     def test_run_stages_rejects_output_root_different_from_external_manifest(self):
         with tempfile.TemporaryDirectory(prefix="external-manifest-mismatch-", dir=ROOT / "reports" / "standalone") as directory:

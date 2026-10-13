@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urlsplit
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from integration import progress
 from integration.check import _resolve_scenario_variant, check_control_trace, check_trace, control_inventory_errors
 from integration.mutation_installation import mutation_for_control, prepare_mutation_workspace
 from integration.mutations import validate_control_bindings
@@ -302,6 +303,9 @@ def run_streaming_command(
     stdout_path = output_directory / "stdout.log"
     stderr_path = output_directory / "stderr.log"
     started = time.monotonic()
+    # The last path parts name the step (`ios/build-for-testing`, `APP-01/runner/p1`).
+    step = "/".join(output_directory.parts[-3:])
+    progress.event("command-start", step=step, program=Path(argv[0]).name)
     process = process_factory(
         argv,
         cwd=Path(cwd),
@@ -379,6 +383,8 @@ def run_streaming_command(
         reader.join(timeout=1)
     process.stdout.close()
     process.stderr.close()
+    progress.event("command-end", step=step, exitCode=process.returncode, timedOut=timed_out,
+                   seconds=time.monotonic() - started)
     if parse_error is not None:
         raise ValueError(f"native controller status stream was rejected: {parse_error}") from parse_error
     return {
@@ -2989,6 +2995,8 @@ def _run_case(
             else:
                 environment = os.environ.copy()
             runner_output = case_root / "runner" / f"p{ordinal}"
+            progress.event("launch-runner-start", scenario=scenario_id, variant=variant_id, launch=ordinal)
+            runner_started = time.monotonic()
             try:
                 runner_result = run_streaming_command(
                     argv,
@@ -3000,9 +3008,17 @@ def _run_case(
                     on_status=status_bridge,
                 )
                 runner_results.append(runner_result)
+                progress.event(
+                    "launch-runner-end", scenario=scenario_id, variant=variant_id, launch=ordinal,
+                    exitCode=runner_result["exitCode"], timedOut=runner_result["timedOut"],
+                    seconds=time.monotonic() - runner_started,
+                )
             except (OSError, ValueError, TimeoutError) as exc:
                 infra_detail = f"native test runner failed for launch {ordinal}: {exc}"
+                progress.event("launch-runner-error", scenario=scenario_id, variant=variant_id, launch=ordinal,
+                               seconds=time.monotonic() - runner_started, detail=exc)
                 break
+            artifacts_started = time.monotonic()
 
             try:
                 if platform == "android":
@@ -3059,6 +3075,8 @@ def _run_case(
                 except OSError as exc:
                     infra_detail = f"iOS app termination was not confirmed for launch {ordinal}: {exc}"
                     break
+            progress.event("launch-evidence-end", scenario=scenario_id, variant=variant_id, launch=ordinal,
+                           seconds=time.monotonic() - artifacts_started)
 
         for process in reversed(process_instances):
             process_id = process["processInstanceId"]
@@ -3206,6 +3224,10 @@ def _run_native_platform(
     trace_bindings = []
     for base_scenario, resolved, variant in _case_inventory(scenario_rows):
         remaining = _remaining_seconds(deadline)
+        case_variant = variant.get("id") if isinstance(variant, dict) else None
+        progress.event("case-start", platform=platform, mutation=mutation_id, scenario=base_scenario["id"],
+                       variant=case_variant, remainingSeconds=remaining)
+        case_started = time.monotonic()
         try:
             case_result, trace, case_screenshots = _run_case(
                 platform=platform,
@@ -3237,6 +3259,11 @@ def _run_native_platform(
             }
             trace = None
             case_screenshots = []
+        progress.event(
+            "case-end", platform=platform, mutation=mutation_id, scenario=base_scenario["id"], variant=case_variant,
+            classification=case_result.get("classification"), seconds=time.monotonic() - case_started,
+            detail=case_result.get("detail"),
+        )
         if mutation_id is not None:
             case_result["mutationId"] = mutation_id
             case_result["buildHash"] = "sha256:" + app_paths["buildHash"]

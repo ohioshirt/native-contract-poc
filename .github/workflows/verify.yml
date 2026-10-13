@@ -8,6 +8,8 @@ permissions:
 jobs:
   verification:
     runs-on: macos-15
+    # Provisional: recent runs took about 10 minutes.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0

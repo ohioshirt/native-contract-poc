@@ -11,6 +11,7 @@ import sys
 
 from integration import protocol_config
 from verification import change_protocol as protocol
+from integration import progress
 
 
 SUITE_STAGES = (
@@ -107,7 +108,9 @@ def aggregate_suite_results(stage_results: list[dict], expected_stages: list[str
         return {"classification": "INVALID_HISTORY", "stageResults": stage_results}
 
     for row in stage_results:
-        if row.get("bindingClassification") != "PASS":
+        if "skippedAfter" in row:
+            row["acceptanceClassification"] = "NOT_RUN"
+        elif row.get("bindingClassification") != "PASS":
             row["acceptanceClassification"] = "INFRA_FAILURE"
         elif row["stageId"] == "integration-red":
             row["acceptanceClassification"] = (
@@ -146,10 +149,25 @@ def run_suite(*, candidate: Path, output: Path) -> dict:
     )
 
 
+def _stops_ledger(row: dict) -> bool:
+    """An infrastructure failure or timeout leaves later stages on the same host unrunnable."""
+    return (
+        row.get("classification") == "INFRA_FAILURE"
+        or row.get("timedOut") is True
+        or row.get("bindingClassification") != "PASS"
+    )
+
+
 def run_stages(
-    *, candidate: Path, output: Path, stages: list[str], manifest: Path, manifest_digest: str
+    *, candidate: Path, output: Path, stages: list[str], manifest: Path, manifest_digest: str,
+    continue_after_failure: bool = False,
 ) -> dict:
-    """Run a unique subset of frozen stages in a platform-specific CI ledger."""
+    """Run a unique subset of frozen stages in a platform-specific CI ledger.
+
+    After a stage stops the ledger (see :func:`_stops_ledger`) the remaining stages are
+    recorded as NOT_RUN with `skippedAfter` instead of being run, unless
+    `continue_after_failure` asks for every stage for diagnosis.
+    """
     candidate = Path(candidate).resolve()
     output = _within(candidate, Path(output))
     manifest = _within(candidate, Path(manifest))
@@ -169,8 +187,26 @@ def run_stages(
 
     digest = manifest_digest
     bound_results = []
-    for stage_id in stages:
+    stopped_by = None
+    for index, stage_id in enumerate(stages, start=1):
         attempt_id = "auto-" + stage_id
+        if stopped_by is not None:
+            skipped_after = {
+                "stageId": stopped_by["stageId"],
+                "classification": stopped_by.get("classification"),
+                "timedOut": stopped_by.get("timedOut") is True,
+            }
+            bound_results.append({
+                "stageId": stage_id,
+                "attemptId": attempt_id,
+                "classification": "NOT_RUN",
+                "bindingClassification": "NOT_RUN",
+                "skippedAfter": skipped_after,
+            })
+            progress.event("stage-skip", stage=stage_id, after=stopped_by["stageId"],
+                           classification=skipped_after["classification"])
+            continue
+        progress.event("stage-start", stage=stage_id, index=f"{index}/{len(stages)}")
         row = run_one(candidate, manifest, digest, stage_id, attempt_id)
         result_directory = row.get("outputDirectory")
         result_path = Path(result_directory) / "result.json" if isinstance(result_directory, str) else None
@@ -181,6 +217,13 @@ def run_stages(
         row["bindingClassification"] = binding.get("bindingClassification", binding.get("classification", "INFRA_FAILURE"))
         row["bindingResult"] = binding
         bound_results.append(row)
+        progress.event(
+            "stage-end", stage=stage_id, classification=row.get("classification"),
+            timedOut=row.get("timedOut") is True, binding=row["bindingClassification"],
+            seconds=row.get("durationSeconds"), detail=row.get("detail"),
+        )
+        if not continue_after_failure and _stops_ledger(row):
+            stopped_by = row
 
     aggregate = aggregate_suite_results(bound_results, expected_stages=stages)
     owner_path = output / ".manifest-digest"
@@ -200,7 +243,7 @@ def run_stages(
         "manifestDigest": digest,
         "manifestOwnerSha256": protocol.digest_bytes(owner_path.read_bytes()),
         "selectedStages": list(stages),
-        "attemptIds": [row["attemptId"] for row in bound_results],
+        "attemptIds": [row["attemptId"] for row in bound_results if "skippedAfter" not in row],
         "candidateDigests": sorted({
             row["candidateDigest"] for row in bound_results
             if isinstance(row.get("candidateDigest"), str)
@@ -600,6 +643,10 @@ def main(argv=None):
     run_stages_parser.add_argument("--manifest", required=True)
     run_stages_parser.add_argument("--manifest-digest", required=True)
     run_stages_parser.add_argument("--stage", action="append", required=True)
+    run_stages_parser.add_argument(
+        "--continue-after-failure", action="store_true",
+        help="run every stage even after an infrastructure failure (diagnosis only)",
+    )
     check_parser = sub.add_parser("check")
     check_parser.add_argument("--candidate", required=True)
     check_parser.add_argument("--manifest", required=True)
@@ -624,6 +671,7 @@ def main(argv=None):
                 stages=args.stage,
                 manifest=Path(args.manifest),
                 manifest_digest=args.manifest_digest,
+                continue_after_failure=args.continue_after_failure,
             )
         elif args.command == "check":
             result = check(Path(args.candidate), Path(args.manifest), args.manifest_digest, Path(args.result) if args.result else None)
