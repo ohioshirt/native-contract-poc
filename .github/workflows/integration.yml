@@ -141,6 +141,16 @@ jobs:
           xcodebuild -resolvePackageDependencies -project apps/ios-demo/NativeContractDemo.xcodeproj -scheme NativeContractDemo \
             2>&1 | tee "$RUNNER_TEMP/native-contract-ios/package-resolution.log"
 
+      # The simulator build below needs the iOS 18.2 platform, which this step
+      # downloads when the hosted Xcode 16.2 image lacks it.
+      - name: Require exact iOS 18.2 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python apps/ios-demo/scripts/prepare-ci-runtime.py \
+            --output "$RUNNER_TEMP/native-contract-ios/runtime-gate" \
+            --timeout-seconds 600
+
       - name: Build iOS package shell
         shell: bash
         run: |
@@ -150,14 +160,6 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/native-contract-ios/preflight-derived-data" \
             CODE_SIGNING_ALLOWED=NO build \
             2>&1 | tee "$RUNNER_TEMP/native-contract-ios/preflight-build.log"
-
-      - name: Require exact iOS 18.2 runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          python apps/ios-demo/scripts/prepare-ci-runtime.py \
-            --output "$RUNNER_TEMP/native-contract-ios/runtime-gate" \
-            --timeout-seconds 600
 
       - name: Create this run's owned iOS simulator
         shell: bash
