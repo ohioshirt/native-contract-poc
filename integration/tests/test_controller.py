@@ -245,6 +245,52 @@ class PlatformControllerTests(unittest.TestCase):
         self.assertEqual(result["classification"], "NOT_RUN")
         self.assertEqual(result["deviceId"], canonical)
 
+    def _run_ios_inventory(self, hangs):
+        # Hosted macOS runners sometimes never answer `simctl list devices`; a fresh call succeeds.
+        canonical = "A1B2C3D4-0000-4000-8000-0000000000A1"
+        calls = []
+
+        def fake_runner(argv, **kwargs):
+            calls.append(kwargs.get("timeout"))
+            if len(calls) <= hangs:
+                raise subprocess.TimeoutExpired(argv, kwargs.get("timeout"))
+            devices = {"devices": {"iOS 18.2": [{"name": "Owned", "udid": canonical, "state": "Booted", "isAvailable": True}]}}
+            return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(devices), stderr="")
+
+        with tempfile.TemporaryDirectory(dir=ROOT / "reports" / "standalone") as temporary:
+            placeholder_candidate = Path(temporary) / "placeholder-candidate"
+            placeholder_candidate.mkdir()
+            result = controller.run_platform(
+                "ios",
+                candidate=placeholder_candidate,
+                output=Path(temporary) / "candidate-ios" / "ios",
+                device=canonical,
+                scenarios=ROOT / "integration/scenarios.json",
+                command_runner=fake_runner,
+            )
+        return result, calls
+
+    def test_ios_inventory_retries_a_hung_simctl(self):
+        result, calls = self._run_ios_inventory(hangs=2)
+
+        self.assertEqual(result["classification"], "NOT_RUN")
+        self.assertIn("SessionCoordinator.swift", result["detail"])
+        self.assertEqual(calls, [60, 60, 60])
+
+    def test_ios_inventory_reports_infra_failure_after_bounded_retries(self):
+        result, calls = self._run_ios_inventory(hangs=3)
+
+        self.assertEqual(result["classification"], "INFRA_FAILURE")
+        self.assertIn("device inventory failed", result["detail"])
+        self.assertEqual(calls, [60, 60, 60])
+
+    def test_refresh_server_start_tolerates_a_slow_runner(self):
+        # Five control cases on one hosted macOS run each missed a 10 s readiness window.
+        import inspect
+
+        default = inspect.signature(controller.LoopbackRun.start).parameters["timeout_seconds"].default
+        self.assertGreaterEqual(default, 60)
+
 
 class ValidationScopeTests(unittest.TestCase):
     def test_ci_runtime_rejects_local_tuple_while_explicit_local_probe_accepts_exact_tuple(self):

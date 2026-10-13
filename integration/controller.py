@@ -480,7 +480,7 @@ class LoopbackRun:
         except URLError as exc:
             raise OSError(f"refresh server request failed: {exc.reason}") from exc
 
-    def start(self, *, timeout_seconds=10):
+    def start(self, *, timeout_seconds=60):
         if self.process_handle is not None:
             raise RuntimeError("refresh server was already started")
         argv = [
@@ -3732,11 +3732,18 @@ def run_platform(
         argv = ["xcrun", "simctl", "list", "devices", "--json"]
     else:
         argv = ["adb", "devices", "-l"]
-    try:
-        completed = command_runner(argv, cwd=candidate, capture_output=True, text=True, timeout=15)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        result.update(classification="INFRA_FAILURE", detail=f"device inventory failed: {exc}")
-        return _write_platform_artifact_shell(output, platform=platform, stage_id=stage_id, scenario_rows=scenario_rows, result=result)
+    # Hosted macOS runners sometimes never answer `simctl list devices`; a fresh call succeeds.
+    for attempt in range(1, 4):
+        try:
+            completed = command_runner(argv, cwd=candidate, capture_output=True, text=True, timeout=60)
+            break
+        except subprocess.TimeoutExpired as exc:
+            if attempt == 3:
+                result.update(classification="INFRA_FAILURE", detail=f"device inventory failed: {exc}")
+                return _write_platform_artifact_shell(output, platform=platform, stage_id=stage_id, scenario_rows=scenario_rows, result=result)
+        except OSError as exc:
+            result.update(classification="INFRA_FAILURE", detail=f"device inventory failed: {exc}")
+            return _write_platform_artifact_shell(output, platform=platform, stage_id=stage_id, scenario_rows=scenario_rows, result=result)
     result["commands"].append({"argv": argv, "exitCode": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr})
     if completed.returncode != 0:
         result.update(classification="INFRA_FAILURE", detail="device inventory command failed")
