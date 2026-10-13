@@ -100,7 +100,9 @@ private struct DebugControlPanel: View {
             ForEach(HookPoint.allCases, id: \.self) { point in
                 HStack {
                     Button("Arm \(point.rawValue)") {
-                        model.performControl { try $0.arm(point, target: selectedTarget) }
+                        // Capture the main-actor @State value before the Sendable closure (Swift 6.0).
+                        let target = selectedTarget
+                        model.performControl { try $0.arm(point, target: target) }
                     }
                     .accessibilityIdentifier(DebugScenarioControlPanelID.arm(point))
                     Text(hookPhase(point))

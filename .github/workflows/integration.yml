@@ -300,6 +300,15 @@ jobs:
             :contract-async:jar :app:assembleDebug :app:assembleDebugAndroidTest \
             2>&1 | tee "$RUNNER_TEMP/native-contract-android/preflight-build.log"
 
+      # x86_64 emulation needs /dev/kvm; GitHub's documented step grants the runner
+      # user access (changelog 2024-04-02, hardware accelerated Android virtualization).
+      - name: Enable KVM group perms
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Create this run's owned Android emulator
         shell: bash
         run: |
