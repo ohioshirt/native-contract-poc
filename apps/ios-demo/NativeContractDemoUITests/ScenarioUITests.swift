@@ -418,6 +418,8 @@ private final class CheckpointResponseBox: @unchecked Sendable {
     }
 }
 
+// XCUIApplication is main-actor isolated; Swift 6.0 (Xcode 16.2) rejects nonisolated test methods using it.
+@MainActor
 final class ScenarioUITests: XCTestCase {
     private let actionTimeout: TimeInterval = 45
     private var probeIDsByProcess: [String: Set<String>] = [:]
