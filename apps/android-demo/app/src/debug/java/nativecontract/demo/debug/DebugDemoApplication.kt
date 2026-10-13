@@ -84,7 +84,7 @@ class DebugDemoApplication : DemoApplication(), DebugScenarioControlProvider {
             model.attach(coordinator)
             coordinator.start()
             control.installLaunchControls(launch.armPoint, launch.armTarget, launch.storeFault)
-            coordinator.submit(AppCommand.Bootstrap).thenAccept(model::recordReceipt)
+            coordinator.submit(AppCommand.Bootstrap)
         } catch (error: Exception) {
             model.setStartupError(error)
         }

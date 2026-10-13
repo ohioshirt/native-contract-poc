@@ -125,7 +125,11 @@ data class CommandReceipt(
  * must never call back into the coordinator.
  */
 interface ViewPublisher {
-    fun publish(view: DemoViewState): CompletableFuture<Unit>
+    /**
+     * [store] is the coordinator's store observation when [view] was made; internal
+     * Deliver commands have no receipt consumer, so the view must carry it.
+     */
+    fun publish(view: DemoViewState, store: StoreObservation): CompletableFuture<Unit>
 }
 
 /** Submissions after process end or during a finish attempt are not admitted. */

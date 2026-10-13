@@ -862,7 +862,7 @@ actor SessionCoordinator {
             lastCommandStatus: status
         )
         await hooks.pauseIfArmed(.beforePublish)
-        await publisher.publish(view)
+        await publisher.publish(view, store: currentStoreObservation)
         currentView = view
         let acknowledgement = appendRequired("uiPublishAck", fields: [
             "commandRef": Self.commandJSON(reference),
@@ -891,7 +891,7 @@ actor SessionCoordinator {
             lastCommandStatus: lastCommandStatus
         )
         await hooks.pauseIfArmed(.beforePublish)
-        await publisher.publish(view)
+        await publisher.publish(view, store: currentStoreObservation)
         currentView = view
         let reference = appendRequired("uiPublishAck", fields: [
             "commandRef": Self.commandJSON(activeCommand),

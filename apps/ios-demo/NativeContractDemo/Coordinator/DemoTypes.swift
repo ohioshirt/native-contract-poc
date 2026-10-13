@@ -174,5 +174,7 @@ struct CommandReceipt: Equatable, Sendable {
 }
 
 protocol ViewPublisher: Sendable {
-    @MainActor func publish(_ view: DemoViewState) async
+    /// `store` is the coordinator's store observation when `view` was made; internal
+    /// Deliver commands have no receipt consumer, so the view must carry it.
+    @MainActor func publish(_ view: DemoViewState, store: StoreObservation) async
 }

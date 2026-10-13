@@ -32,31 +32,28 @@ final class DemoViewModel: ObservableObject, ViewPublisher {
     }
 
     @MainActor
-    func publish(_ view: DemoViewState) async {
+    func publish(_ view: DemoViewState, store: StoreObservation) async {
         guard view.processInstanceId == current.processInstanceId,
               view.revision > current.revision else { return }
         current = view
+        storeObservation = store
     }
 
     func attach(_ coordinator: SessionCoordinator) {
         self.coordinator = coordinator
     }
 
+    /// The store label follows publications only: a receipt can arrive after a newer
+    /// publication (for example an HTTP completion) and would roll the label back.
     func submit(_ command: AppCommand) {
         guard let coordinator else { return }
-        Task { [weak self, coordinator] in
-            let receipt = await coordinator.submit(command)
-            guard let self else { return }
-            storeObservation = receipt.observation.store
+        Task { [coordinator] in
+            _ = await coordinator.submit(command)
         }
     }
 
     func setStartupError(_ error: Error) {
         startupError = String(describing: error)
-    }
-
-    func updateStoreObservation(_ observation: StoreObservation) {
-        storeObservation = observation
     }
 
     /// Frozen session-state labels: authenticated phases append the redacted

@@ -43,7 +43,7 @@ open class DemoApplication : Application() {
             this.coordinator = coordinator
             model.attach(coordinator)
             coordinator.start()
-            coordinator.submit(AppCommand.Bootstrap).thenAccept(model::recordReceipt)
+            coordinator.submit(AppCommand.Bootstrap)
         } catch (error: Exception) {
             model.setStartupError(error)
         }

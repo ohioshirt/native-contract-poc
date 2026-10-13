@@ -102,6 +102,31 @@ class CoordinatorTest {
         assertEquals(CredentialAccount.B, view.account)
     }
 
+    /**
+     * An HTTP completion is an internal Deliver whose receipt never reaches the view
+     * model, so every publication must carry the store observation it was made with.
+     */
+    @Test
+    fun internalRefreshDeliveriesPublishTheirStoreObservation() {
+        val cases = listOf(
+            Triple(RefreshOutcome.Success(Credential.demo(CredentialAccount.A, 1L)), StoreObservation.Present("A", 1L), SessionPhase.SIGNED_IN),
+            Triple(RefreshOutcome.Failure("rejected"), StoreObservation.Absent, SessionPhase.SIGNED_OUT),
+        )
+        for ((outcome, expectedStore, expectedPhase) in cases) {
+            val harness = Harness("APP-06")
+            harness.bootstrapAndLogin(CredentialAccount.A)
+            harness.submit(AppCommand.Expire)
+            val pending = harness.transport.awaitPending()
+            assertEquals(StoreObservation.Present("A", 0L), harness.publisher.latestStore())
+
+            harness.transport.deliver(pending, outcome)
+            assertEquals("Completed", harness.audit.awaitReceipt(4L)["status"])
+
+            assertEquals(expectedPhase, harness.publisher.latest().phase)
+            assertEquals(expectedStore, harness.publisher.latestStore())
+        }
+    }
+
     @Test
     fun duplicateCannotCommitTwice() {
         val harness = Harness("APP-06")
@@ -612,14 +637,20 @@ private class MemoryAuditRecorder(private val tee: TerminalAuditRecorder? = null
 private open class RecordingPublisher : ViewPublisher {
     private val lock = Object()
     private val items = ArrayList<DemoViewState>()
+    private val stores = ArrayList<StoreObservation>()
     val published: List<DemoViewState> get() = synchronized(lock) { ArrayList(items) }
 
-    override fun publish(view: DemoViewState): CompletableFuture<Unit> {
-        synchronized(lock) { items.add(view) }
+    override fun publish(view: DemoViewState, store: StoreObservation): CompletableFuture<Unit> {
+        synchronized(lock) {
+            items.add(view)
+            stores.add(store)
+        }
         return CompletableFuture.completedFuture(Unit)
     }
 
     fun latest(): DemoViewState = published.last()
+
+    fun latestStore(): StoreObservation = synchronized(lock) { stores.last() }
 }
 
 /** Completes publication acknowledgements only while open, on a separate thread. */
@@ -641,8 +672,8 @@ private class GatedPublisher : RecordingPublisher() {
         check(blocked.await(WAIT_SECONDS, TimeUnit.SECONDS)) { "no publication reached the closed gate" }
     }
 
-    override fun publish(view: DemoViewState): CompletableFuture<Unit> {
-        super.publish(view)
+    override fun publish(view: DemoViewState, store: StoreObservation): CompletableFuture<Unit> {
+        super.publish(view, store)
         if (openGate) return CompletableFuture.completedFuture(Unit)
         val future = CompletableFuture<Unit>()
         waiting.add(future)

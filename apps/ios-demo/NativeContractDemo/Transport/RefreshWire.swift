@@ -54,7 +54,7 @@ enum RefreshWire {
         slot: RefreshSlot
     ) -> RefreshOutcome {
         guard data.count <= maximumBodyBytes,
-              !JSONDuplicateKeyScanner.hasDuplicateKeys(data),
+              JSONWireScanner.isWireCompatible(data),
               let object = try? JSONSerialization.jsonObject(with: data, options: []),
               let fields = object as? [String: Any],
               let version = exactInt64(fields["version"]), version == 1,
@@ -127,22 +127,24 @@ private enum RefreshWireError: Error {
     case invalidRequest
 }
 
-/// Foundation's JSON object APIs discard duplicate keys. This small scanner only
-/// identifies duplicate object members; JSONSerialization remains the syntax and
+/// Foundation's JSON object APIs discard duplicate keys and round number literals
+/// (`1.0000000000000001` becomes 1) before any NSNumber check. This small scanner
+/// rejects duplicate object members and every number literal that is not a plain
+/// integer, matching the Kotlin decoder; JSONSerialization remains the syntax and
 /// type decoder for the actual versioned envelope.
-private struct JSONDuplicateKeyScanner {
+private struct JSONWireScanner {
     private let bytes: [UInt8]
     private var index = 0
 
     private init(_ data: Data) { bytes = Array(data) }
 
-    static func hasDuplicateKeys(_ data: Data) -> Bool {
-        var scanner = JSONDuplicateKeyScanner(data)
+    static func isWireCompatible(_ data: Data) -> Bool {
+        var scanner = JSONWireScanner(data)
         do {
             try scanner.scanValue()
-            return false
-        } catch {
             return true
+        } catch {
+            return false
         }
     }
 
@@ -213,6 +215,18 @@ private struct JSONDuplicateKeyScanner {
             index += 1
         }
         guard index > start else { throw RefreshWireError.invalidRequest }
+        let token = bytes[start..<index]
+        if let first = token.first, first == 0x2D || (0x30...0x39).contains(first) {
+            guard Self.isIntegerLiteral(token) else { throw RefreshWireError.invalidRequest }
+        }
+    }
+
+    /// `-?(0|[1-9][0-9]*)`: JSON's integer form without fraction or exponent.
+    private static func isIntegerLiteral(_ token: ArraySlice<UInt8>) -> Bool {
+        let digits = token.first == 0x2D ? token.dropFirst() : token
+        guard let first = digits.first,
+              digits.allSatisfy({ (0x30...0x39).contains($0) }) else { return false }
+        return first != 0x30 || digits.count == 1
     }
 
     private mutating func skipWhitespace() {

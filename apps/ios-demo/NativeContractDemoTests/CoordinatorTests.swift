@@ -296,6 +296,89 @@ final class CoordinatorTests: XCTestCase {
         XCTAssertEqual(mutation["after"] as? NSDictionary, storeRow("Absent"))
     }
 
+    /// An HTTP completion is an internal Deliver whose receipt never reaches the view
+    /// model, so every publication must carry the store observation it was made with.
+    func testInternalRefreshDeliveriesPublishTheirStoreObservation() async throws {
+        let cases: [(RefreshOutcome, StoreObservation, SessionPhase)] = [
+            (.success(.demo(account: .a, version: 1)), .present(account: "A", version: 1), .signedIn),
+            (.failure("rejected"), .absent, .signedOut),
+        ]
+        for (outcome, expectedStore, expectedPhase) in cases {
+            let harness = try await makeHarness("APP-06")
+            try await bootstrapAndLogin(.a, in: harness)
+            _ = await harness.coordinator.submit(.expire)
+            let pending = try await harness.transport.waitForPending()
+            let refreshingStore = await MainActor.run { harness.publisher.currentStore }
+            XCTAssertEqual(refreshingStore, .present(account: "A", version: 0))
+
+            harness.transport.deliver(pending, outcome: outcome)
+            let view = try await harness.publisher.waitForCommand(4)
+            let store = await MainActor.run { harness.publisher.currentStore }
+
+            XCTAssertEqual(view.phase, expectedPhase)
+            XCTAssertEqual(store, expectedStore)
+        }
+    }
+
+    @MainActor
+    func testCredentialLabelFollowsPublishedStoreAndIgnoresStaleRevisions() async {
+        let model = DemoViewModel(process: ProcessContext(processInstanceId: "store/p1", launchOrdinal: 1, attemptId: "store", scenarioId: "store"))
+        func view(_ revision: Int64, _ phase: SessionPhase, _ version: Int64?) -> DemoViewState {
+            DemoViewState(
+                processInstanceId: "store/p1",
+                revision: revision,
+                phase: phase,
+                account: version == nil ? nil : .a,
+                credentialVersion: version,
+                pendingRequestId: nil,
+                lastCompletedCommandId: nil,
+                lastCommandStatus: nil
+            )
+        }
+        XCTAssertEqual(model.credentialStatusLabel, "Credentials unknown")
+
+        await model.publish(view(1, .signedIn, 0), store: .present(account: "A", version: 0))
+        XCTAssertEqual(model.credentialStatusLabel, "Credentials version 0")
+        await model.publish(view(2, .signedIn, 1), store: .present(account: "A", version: 1))
+        XCTAssertEqual(model.credentialStatusLabel, "Credentials version 1")
+        await model.publish(view(1, .signedOut, nil), store: .absent)
+        XCTAssertEqual(model.credentialStatusLabel, "Credentials version 1")
+        await model.publish(view(3, .signedOut, nil), store: .absent)
+        XCTAssertEqual(model.credentialStatusLabel, "Credentials absent")
+    }
+
+    /// The real view model as the coordinator's publisher: the label must follow an
+    /// HTTP completion that no `submit` receipt ever reports.
+    @MainActor
+    func testViewModelCredentialLabelFollowsHttpRefreshCompletion() async throws {
+        let context = ProcessContext(processInstanceId: "label-e2e/APP-06/p1", launchOrdinal: 1, attemptId: "label-e2e", scenarioId: "APP-06")
+        let model = DemoViewModel(process: context)
+        let transport = TestRefreshTransport()
+        let coordinator = SessionCoordinator(
+            process: context,
+            store: TestCredentialStore(),
+            transport: transport,
+            publisher: model,
+            hooks: TestScenarioHooks(),
+            audit: MemoryAuditRecorder(),
+            cancelTransportOnCancelRefresh: false
+        )
+        try await coordinator.start()
+        _ = await coordinator.submit(.bootstrap)
+        _ = await coordinator.submit(.login(.a))
+        _ = await coordinator.submit(.expire)
+        let pending = try await transport.waitForPending()
+        XCTAssertEqual(model.credentialStatusLabel, "Credentials version 0")
+
+        transport.deliver(pending, outcome: .success(.demo(account: .a, version: 1)))
+        for _ in 0..<200 where model.current.lastCompletedCommandId != 4 {
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        XCTAssertEqual(model.sessionLabel, "Signed in demo-A")
+        XCTAssertEqual(model.credentialStatusLabel, "Credentials version 1")
+    }
+
     /// Frozen session-state labels (integration/native-anchors.md): authenticated
     /// phases carry `…demo-A`/`…demo-B`; unauthenticated phases carry no account.
     @MainActor
@@ -322,7 +405,7 @@ final class CoordinatorTests: XCTestCase {
                 lastCompletedCommandId: nil,
                 lastCommandStatus: nil
             )
-            await model.publish(view)
+            await model.publish(view, store: .absent)
             XCTAssertEqual(model.sessionLabel, expected)
         }
     }
@@ -1204,6 +1287,7 @@ private final class TestScenarioHooks: ScenarioHooks, @unchecked Sendable {
 @MainActor
 private final class RecordingViewPublisher: ViewPublisher {
     private(set) var current: DemoViewState?
+    private(set) var currentStore: StoreObservation?
     private(set) var published: [DemoViewState] = []
     private var nextGate: TestBarrier?
 
@@ -1211,12 +1295,13 @@ private final class RecordingViewPublisher: ViewPublisher {
         nextGate = gate
     }
 
-    func publish(_ view: DemoViewState) async {
+    func publish(_ view: DemoViewState, store: StoreObservation) async {
         if let gate = nextGate {
             nextGate = nil
             await gate.pause()
         }
         current = view
+        currentStore = store
         published.append(view)
     }
 

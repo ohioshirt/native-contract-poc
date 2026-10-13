@@ -86,6 +86,21 @@ class TransportTest {
         assertEquals("malformed", failure(" ".repeat(RefreshWire.MAXIMUM_BODY_BYTES + 1)))
     }
 
+    /** Same literals as the Swift wire test: the wire carries plain integers only. */
+    @Test
+    fun nonIntegerNumberLiteralsAreMalformedLikeTheSwiftWire() {
+        val slot = slot()
+        fun body(envelope: String, credential: String) =
+            """{"version":$envelope,"runId":"run-1","requestTag":"${slot.wireTag}","outcome":"success","credential":{"account":"A","version":$credential,"accessToken":"demo-A-v1","refreshToken":"demo-A-v1"}}"""
+        assertIs<RefreshOutcome.Success>(RefreshWire.parseResponse(body("1", "1").toByteArray(), 200, "run-1", slot))
+        for (literal in listOf("1.0", "1e0", "1E0", "1.0000000000000001", "10e-1")) {
+            for ((envelope, credential) in listOf(literal to "1", "1" to literal)) {
+                val outcome = RefreshWire.parseResponse(body(envelope, credential).toByteArray(), 200, "run-1", slot)
+                assertEquals(RefreshOutcome.Failure("malformed"), outcome, "envelope $envelope, credential $credential")
+            }
+        }
+    }
+
     @Test
     fun jsonDecoderIsStrictAndEncoderRoundTrips() {
         assertFailsWith<JsonFormatException> { Json.parse("""{"a":1,"a":2}""") }

@@ -8,7 +8,6 @@ import androidx.compose.runtime.setValue
 import java.util.concurrent.CompletableFuture
 import nativecontract.demo.contract.StoreObservation
 import nativecontract.demo.coordinator.AppCommand
-import nativecontract.demo.coordinator.CommandReceipt
 import nativecontract.demo.coordinator.DemoViewState
 import nativecontract.demo.coordinator.ProcessContext
 import nativecontract.demo.coordinator.SessionCoordinator
@@ -33,11 +32,12 @@ class DemoViewModel(process: ProcessContext) : ViewPublisher {
     var startupError by mutableStateOf<String?>(null)
         private set
 
-    override fun publish(view: DemoViewState): CompletableFuture<Unit> {
+    override fun publish(view: DemoViewState, store: StoreObservation): CompletableFuture<Unit> {
         val acknowledged = CompletableFuture<Unit>()
         mainHandler.post {
             if (view.processInstanceId == current.processInstanceId && view.revision > current.revision) {
                 current = view
+                storeObservation = store
             }
             acknowledged.complete(Unit)
         }
@@ -48,13 +48,13 @@ class DemoViewModel(process: ProcessContext) : ViewPublisher {
         this.coordinator = coordinator
     }
 
-    /** Non-blocking: the main thread never waits on a command future. */
+    /**
+     * Non-blocking: the main thread never waits on a command future. The store label
+     * follows publications only: a receipt can arrive after a newer publication (for
+     * example an HTTP completion) and would roll the label back.
+     */
     fun submit(command: AppCommand) {
-        coordinator?.submit(command)?.thenAccept(::recordReceipt)
-    }
-
-    fun recordReceipt(receipt: CommandReceipt) {
-        mainHandler.post { storeObservation = receipt.observation.store }
+        coordinator?.submit(command)
     }
 
     fun setStartupError(error: Throwable) {

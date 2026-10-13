@@ -768,7 +768,7 @@ class SessionCoordinator(
     private fun publish(reference: AppCommandReference, view: DemoViewState): NativeEventReference {
         hooks.pauseIfArmed(HookPoint.BEFORE_PUBLISH)
         try {
-            publisher.publish(view).get()
+            publisher.publish(view, currentStoreObservation).get()
         } catch (error: Exception) {
             FailStop.stop("UI publication failed: ${error.javaClass.simpleName}")
         }

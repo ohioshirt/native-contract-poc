@@ -50,6 +50,28 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(RefreshWire.parseResponse(duplicate, statusCode: 200, expectedRunId: "task4-run", slot: slot), .failure("malformed"))
     }
 
+    /// The wire carries integers only; Foundation would round `1.0000000000000001` to 1
+    /// before any NSNumber check, so non-integer number literals are rejected while scanning.
+    func testNonIntegerNumberLiteralsAreMalformedBeforeFoundationRoundsThem() async throws {
+        let slot = try await makeSlot(account: .a, requestIdStart: 1)
+        func body(envelope: String, credential: String) -> Data {
+            Data(#"{"version":\#(envelope),"runId":"task4-run","requestTag":"task4-p1:refresh:3","outcome":"success","credential":{"account":"A","version":\#(credential),"accessToken":"demo-A-v1","refreshToken":"demo-A-v1"}}"#.utf8)
+        }
+        XCTAssertEqual(
+            RefreshWire.parseResponse(body(envelope: "1", credential: "1"), statusCode: 200, expectedRunId: "task4-run", slot: slot),
+            .success(.demo(account: .a, version: 1))
+        )
+        for literal in ["1.0", "1e0", "1E0", "1.0000000000000001", "10e-1"] {
+            for (envelope, credential) in [(literal, "1"), ("1", literal)] {
+                XCTAssertEqual(
+                    RefreshWire.parseResponse(body(envelope: envelope, credential: credential), statusCode: 200, expectedRunId: "task4-run", slot: slot),
+                    .failure("malformed"),
+                    "envelope \(envelope), credential \(credential)"
+                )
+            }
+        }
+    }
+
     func testServerFailureCodesRemainRedactedAndStable() async throws {
         let slot = try await makeSlot(account: .a, requestIdStart: 1)
         let body = Data(#"{"version":1,"runId":"task4-run","requestTag":"task4-p1:refresh:3","outcome":"failure","failure":"server"}"#.utf8)

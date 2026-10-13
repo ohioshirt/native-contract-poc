@@ -209,8 +209,7 @@ final class DemoEnvironment: ObservableObject {
             do {
                 try await coordinator.start()
                 try control.installLaunchControls(armPoint: launch.armPoint, armTarget: launch.armTarget, storeFault: launch.storeFault)
-                let receipt = await coordinator.submit(.bootstrap)
-                viewModel?.updateStoreObservation(receipt.observation.store)
+                _ = await coordinator.submit(.bootstrap)
             } catch {
                 viewModel?.setStartupError(error)
             }
@@ -230,8 +229,7 @@ final class DemoEnvironment: ObservableObject {
         startupTask = Task { [weak viewModel] in
             do {
                 try await coordinator.start()
-                let receipt = await coordinator.submit(.bootstrap)
-                viewModel?.updateStoreObservation(receipt.observation.store)
+                _ = await coordinator.submit(.bootstrap)
             } catch {
                 viewModel?.setStartupError(error)
             }
