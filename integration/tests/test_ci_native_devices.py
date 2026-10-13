@@ -33,10 +33,14 @@ class FakeNativeTools:
         self.occupied_serial = False
         self.spawned = []
         self.timeouts = []
+        self.inventory_hangs = 0
 
     def run(self, argv, **kwargs):
         self.argv.append(list(argv))
         self.timeouts.append((list(argv), kwargs.get("timeout")))
+        if argv[:4] == ["xcrun", "simctl", "list", "devices"] and self.inventory_hangs:
+            self.inventory_hangs -= 1
+            raise subprocess.TimeoutExpired(argv, kwargs.get("timeout"))
         stdout = ""
         if argv[:2] == ["xcodebuild", "-version"]:
             stdout = "Xcode 16.2\nBuild version 16C5032a\n"
@@ -304,25 +308,48 @@ class CiNativeDeviceCliTests(unittest.TestCase):
             self.assertEqual((output / "ios-device.json").is_file(), True)
             self.assertIn(f"IOS_SIMULATOR_UDID={FakeNativeTools.udid}", env_file.read_text())
 
-    def test_ios_device_inventory_tolerates_a_slow_coresimulator_after_boot(self):
-        # On hosted macOS runners `simctl list devices` exceeded 30 s right after bootstatus.
+    def _ios_manager(self, tools, directory):
+        return CiDeviceBootstrap(
+            output=Path(directory) / "ios",
+            run_id="workflow-123-1",
+            platform="ios",
+            host_platform="darwin",
+            environment={},
+            runner=tools.run,
+        )
+
+    def test_ios_device_inventory_retries_a_hung_simctl_after_boot(self):
+        # Hosted macOS runners sometimes never answer `simctl list devices` right after bootstatus.
+        tools = FakeNativeTools()
+        tools.inventory_hangs = 2
+        with tempfile.TemporaryDirectory(prefix="ci-ios-inventory-") as directory:
+            result = self._ios_manager(tools, directory).prepare()
+            commands = json.loads((Path(directory) / "ios" / "commands.json").read_text())["commands"]
+
+        self.assertEqual(result["classification"], "READY")
+        inventory = [row for row in commands if row["argv"][:4] == ["xcrun", "simctl", "list", "devices"]]
+        self.assertEqual([row["timedOut"] for row in inventory], [True, True, False])
+        timeouts = [timeout for argv, timeout in tools.timeouts if argv[:4] == ["xcrun", "simctl", "list", "devices"]]
+        self.assertEqual(timeouts, [60, 60, 60])
+
+    def test_ios_device_inventory_gives_up_after_bounded_retries(self):
+        tools = FakeNativeTools()
+        tools.inventory_hangs = 5
+        with tempfile.TemporaryDirectory(prefix="ci-ios-inventory-") as directory:
+            with self.assertRaisesRegex(DeviceBootstrapError, "timed out"):
+                self._ios_manager(tools, directory).prepare()
+
+        inventory = [argv for argv, _ in tools.timeouts if argv[:4] == ["xcrun", "simctl", "list", "devices"]]
+        self.assertEqual(len(inventory), 5)
+
+    def test_ios_cleanup_inventory_also_retries_a_hung_simctl(self):
         tools = FakeNativeTools()
         with tempfile.TemporaryDirectory(prefix="ci-ios-inventory-") as directory:
-            output = Path(directory) / "ios"
-            manager = CiDeviceBootstrap(
-                output=output,
-                run_id="workflow-123-1",
-                platform="ios",
-                host_platform="darwin",
-                environment={},
-                runner=tools.run,
-            )
-            manager.prepare()
-            manager.cleanup()
+            self._ios_manager(tools, directory).prepare()
+            tools.inventory_hangs = 1
+            self._ios_manager(tools, directory).cleanup()
 
-        inventory = [timeout for argv, timeout in tools.timeouts if argv[:4] == ["xcrun", "simctl", "list", "devices"]]
-        self.assertEqual(len(inventory), 2)
-        self.assertTrue(all(timeout >= 180 for timeout in inventory), inventory)
+        self.assertTrue(tools.device_deleted)
 
     def test_android_prepare_verifies_own_avd_serial_api_and_abi(self):
         tools = FakeNativeTools()

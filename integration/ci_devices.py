@@ -20,9 +20,15 @@ class DeviceBootstrapError(RuntimeError):
     pass
 
 
+class DeviceCommandTimeout(DeviceBootstrapError):
+    pass
+
+
 _RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,47}\Z")
-# Hosted macOS runners answer `simctl list devices` slowly right after a boot (>30 s observed).
-_SIMCTL_INVENTORY_TIMEOUT_SECONDS = 180
+# Hosted macOS runners sometimes never answer `simctl list devices` right after a boot,
+# while a fresh invocation succeeds, so each attempt is bounded and retried.
+_SIMCTL_INVENTORY_TIMEOUT_SECONDS = 60
+_SIMCTL_INVENTORY_ATTEMPTS = 5
 _UUID = re.compile(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\Z")
 _AVD_NAME = re.compile(r"native_contract_[A-Za-z0-9_]{1,48}\Z")
 
@@ -171,7 +177,7 @@ class CiDeviceBootstrap:
             stdout = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
             stderr = exc.stderr.decode("utf-8", "replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
             self._record(argv, cwd=Path.cwd(), environment=env, stdout=stdout, stderr=stderr, exit_code=None, timed_out=True)
-            raise DeviceBootstrapError("owned device command timed out") from exc
+            raise DeviceCommandTimeout("owned device command timed out") from exc
         row = self._record(
             argv,
             cwd=Path(__file__).resolve().parents[1],
@@ -183,6 +189,14 @@ class CiDeviceBootstrap:
         if check and completed.returncode != 0:
             raise DeviceBootstrapError(f"owned device command failed with exit {completed.returncode}: {argv[0]}")
         return row
+
+    def _simctl_inventory(self):
+        for attempt in range(1, _SIMCTL_INVENTORY_ATTEMPTS + 1):
+            try:
+                return self._run(["xcrun", "simctl", "list", "devices", "--json"], timeout_seconds=_SIMCTL_INVENTORY_TIMEOUT_SECONDS)
+            except DeviceCommandTimeout:
+                if attempt == _SIMCTL_INVENTORY_ATTEMPTS:
+                    raise
 
     def _save_ownership(self):
         _write_json(self.output / "ownership.json", {
@@ -273,7 +287,7 @@ class CiDeviceBootstrap:
         self._save_ownership()
         self._run(["xcrun", "simctl", "boot", udid])
         self._run(["xcrun", "simctl", "bootstatus", udid, "-b"], timeout_seconds=self._remaining())
-        devices_doc = json.loads(self._run(["xcrun", "simctl", "list", "devices", "--json"], timeout_seconds=_SIMCTL_INVENTORY_TIMEOUT_SECONDS)["stdout"])
+        devices_doc = json.loads(self._simctl_inventory()["stdout"])
         rows = [row for row in _device_rows(devices_doc) if row.get("udid", "").casefold() == udid.casefold()]
         if len(rows) != 1:
             raise DeviceBootstrapError("created simulator is absent or ambiguous in simctl inventory")
@@ -466,7 +480,7 @@ class CiDeviceBootstrap:
                 for row in commands
             ):
                 raise DeviceBootstrapError("simulator creation evidence does not match its ownership record")
-        inventory = json.loads(self._run(["xcrun", "simctl", "list", "devices", "--json"], timeout_seconds=_SIMCTL_INVENTORY_TIMEOUT_SECONDS)["stdout"])
+        inventory = json.loads(self._simctl_inventory()["stdout"])
         matching = [row for row in _device_rows(inventory) if row.get("udid", "").casefold() == udid.casefold()]
         if not matching:
             return
