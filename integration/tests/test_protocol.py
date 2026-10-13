@@ -55,14 +55,24 @@ class ProtocolConfigurationTests(unittest.TestCase):
         self.assertTrue(workflow_path.is_file(), "the standalone integration preflight workflow is missing")
         lines = workflow_path.read_text().splitlines()
         text = "\n".join(lines)
-        action_refs = re.findall(r"^\s*uses:\s*([^@\s]+)@([0-9a-f]+)\s*$", text, flags=re.MULTILINE)
-        self.assertTrue(action_refs, "workflow has no actions pinned by full commit SHA")
-        self.assertTrue(all(len(commit) == 40 for _, commit in action_refs))
         toolchain = json.loads((ROOT / "integration" / "toolchain.json").read_text())
         declared_actions = {
-            (row["repository"], row["commit"])
+            (row["repository"], row["commit"], row["version"])
             for row in toolchain["ciActions"]
         }
+        # Every workflow pins each action by full commit SHA, annotated with its declared release tag.
+        for path in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            with self.subTest(workflow=path.name):
+                workflow_text = path.read_text()
+                uses_lines = re.findall(r"^\s*(?:- )?uses:.*$", workflow_text, flags=re.MULTILINE)
+                pinned = [
+                    re.fullmatch(r"\s*(?:- )?uses: ([^@\s]+)@([0-9a-f]{40}) # (v[0-9][0-9.]*)", line)
+                    for line in uses_lines
+                ]
+                self.assertTrue(uses_lines, "workflow has no actions")
+                self.assertEqual([line for line, match in zip(uses_lines, pinned) if match is None], [])
+                self.assertTrue({match.groups() for match in pinned} <= declared_actions)
+        action_refs = re.findall(r"^\s*uses: ([^@\s]+)@([0-9a-f]{40}) # (v[0-9][0-9.]*)$", text, flags=re.MULTILINE)
         self.assertEqual(set(action_refs), declared_actions)
         normalized = " ".join(re.sub(r"\\\n\s*", " ", text).split())
         for project_step in (
@@ -78,6 +88,26 @@ class ProtocolConfigurationTests(unittest.TestCase):
         self.assertLess(list_index, resolve_index)
         self.assertLess(resolve_index, build_index)
         self.assertNotIn("DEVELOPMENT_TEAM", text)
+
+    def test_ci_workflow_runs_native_ledgers_on_pull_requests_only_with_the_native_ci_label(self):
+        workflow = (ROOT / ".github" / "workflows" / "integration.yml").read_text()
+        trigger = workflow[workflow.index("\non:\n"):workflow.index("\njobs:\n")]
+        self.assertIn("types: [opened, synchronize, reopened, labeled]", trigger)
+        self.assertIn("workflow_dispatch:", trigger)
+        self.assertIn("branches: [main]", trigger)
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
+        jobs = re.split(r"(?m)^  (?=[a-z-]+:$)", workflow[workflow.index("\njobs:\n"):])[1:]
+        headers = {block.split(":", 1)[0]: block.split("\n    steps:", 1)[0] for block in jobs}
+        self.assertEqual(set(headers), {"evaluator-and-freeze", "ios-native", "android-native", "native-acceptance"})
+        native_gate = "contains(github.event.pull_request.labels.*.name, 'native-ci')"
+        for job in ("ios-native", "android-native", "native-acceptance"):
+            with self.subTest(job=job):
+                self.assertIn("github.event_name != 'pull_request' || " + native_gate, headers[job])
+        self.assertNotIn(native_gate, headers["evaluator-and-freeze"])
+        # Adding an unrelated label must not rerun anything.
+        for job, header in headers.items():
+            with self.subTest(job=job):
+                self.assertIn("github.event.action != 'labeled' || github.event.label.name == 'native-ci'", header)
 
     def test_ci_workflow_runs_the_frozen_full_gate_and_cleans_only_owned_devices(self):
         workflow = (ROOT / ".github" / "workflows" / "integration.yml").read_text()
