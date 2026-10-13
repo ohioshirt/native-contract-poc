@@ -25,6 +25,66 @@ class ProtocolError(ValueError):
 
 PROTECTED = ['contract/', 'verification/', 'formal/', 'scripts/']
 NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$')
+INTEGRATION_PLATFORMS = {
+    'integration-red': ['evaluator'],
+    'candidate-ios': ['ios'],
+    'candidate-android': ['android'],
+    'integration-controls': ['ios', 'android'],
+}
+INTEGRATION_TRACE_VARIANTS = {
+    'APP-01': [None], 'APP-02': [None], 'APP-03': [None], 'APP-04': [None], 'APP-05': [None],
+    'APP-06': [None], 'APP-07': [None], 'APP-08': [None],
+    'APP-09': ['replace-before', 'replace-after-before-verify'],
+    'APP-10': ['clear-before', 'clear-after-before-verify'],
+    'APP-10-RECOVER-OLD': [None],
+    'APP-11': ['store-pause', 'publish-pause'],
+    'APP-12-SAVED': [None], 'APP-12-LOGGED-OUT': [None],
+    'APP-13': ['http500-current', 'malformed-current', 'disconnect-current', 'wrong-correlation-current', 'wrong-correlation-after-login-b'],
+    'APP-14': [None],
+}
+INTEGRATION_CONTROL_TRACE_VARIANTS = {
+    'CTRL-N1-LOGOUT': [None], 'CTRL-N1-NEW-LOGIN': [None], 'CTRL-N2-LATE-CLEAR': [None],
+    'CTRL-N3-EARLY-PUBLISH': [None], 'CTRL-N4-FALSE-LOGOUT': [None],
+}
+INTEGRATION_RED_WITNESSES = {'APP-02': {'I2','I3'}, 'APP-04': {'I4'}}
+INTEGRATION_CONTROL_WITNESSES = {
+    'CTRL-N1-LOGOUT': ['I2', 'I3'],
+    'CTRL-N1-NEW-LOGIN': ['I2', 'I4'],
+    'CTRL-N2-LATE-CLEAR': ['I4'],
+    'CTRL-N3-EARLY-PUBLISH': ['I6'],
+    'CTRL-N4-FALSE-LOGOUT': ['I5', 'I8'],
+}
+MODEL_REQUIRED_WITNESSES = [
+    'APP-02-success-after-logout',
+    'APP-03-failure-after-logout',
+    'APP-04-old-success-after-login-b',
+    'APP-05-old-failure-after-login-b',
+    'duplicate-delivery',
+    'queued-logout-during-pause',
+    'fault-retry-cleanup',
+    'restart-bootstrap-cleanup',
+    'foreign-same-id',
+]
+MODEL_MUTANT_WITNESSES = {
+    'unconditional-success-commit': ['I2', 'I3', 'I4'],
+    'reentrant-consumer': ['I1', 'I3'],
+    'duplicate-deferred-clear': ['I4'],
+    'unverified-publish': ['I6'],
+    'failed-clear-ack': ['I8'],
+}
+MODEL_BOUNDS = {
+    'dequeuedCommands': 6,
+    'uiRevisions': 12,
+    'owners': 2,
+    'epochs': 3,
+    'requestIdsPerOwner': 2,
+    'queuedCommands': 2,
+    'currentSlots': 1,
+    'retainedOldSlots': 1,
+    'replaysPerSlot': 1,
+}
+VERDICT_VALUES = {'PASS', 'SEMANTIC_FAIL', 'INVALID_HISTORY', 'INFRA_FAILURE', 'NOT_RUN', 'INCONCLUSIVE'}
+SHA256 = re.compile(r'^sha256:[0-9a-f]{64}$')
 
 
 def digest_bytes(data):
@@ -49,7 +109,11 @@ def relative(value):
 
 
 def matches(path, rules):
-    return any(path == rule.rstrip('/') or (rule.endswith('/') and path.startswith(rule)) for rule in rules)
+    return any(
+        (rule == '**/.DS_Store' and PurePosixPath(path).name == '.DS_Store')
+        or path == rule.rstrip('/') or (rule.endswith('/') and path.startswith(rule))
+        for rule in rules
+    )
 
 
 def overlap(a, b):
@@ -112,10 +176,23 @@ def validate_config(config):
     metadata(config['metadata'])
     if not isinstance(config['provenance'],dict) or not config['provenance']:
         raise ProtocolError('explicit nonempty provenance required')
+    if (config['changeId']=='standalone-native-app-integration'
+            and (type(config['provenance'].get('maxAttemptsPerStage')) is not int
+                 or config['provenance']['maxAttemptsPerStage']!=2)):
+        raise ProtocolError('standalone integration requires its frozen two-attempt per-stage budget')
     if not isinstance(config['stages'],dict) or not config['stages']: raise ProtocolError('named stages required')
     for name,stage in config['stages'].items():
         if not NAME.fullmatch(name): raise ProtocolError('invalid stage ID')
-        if not isinstance(stage,dict) or set(stage)!= {'argv','cwd','timeoutSeconds','verdictProtocol','requiredArtifacts'}:
+        base_stage_keys={'argv','cwd','timeoutSeconds','verdictProtocol','requiredArtifacts'}
+        if not isinstance(stage,dict): raise ProtocolError('invalid frozen stage shape')
+        protocol=stage.get('verdictProtocol')
+        integration_stage=protocol=='integration-comparator'
+        expected_stage_keys=base_stage_keys|({'expectedPlatforms','requiredScenarioIds'} if integration_stage else set())
+        if integration_stage and name in {'candidate-ios','candidate-android','integration-controls'}:
+            expected_stage_keys |= {'expectedTraceBindings'}
+        if integration_stage and name == 'integration-controls':
+            expected_stage_keys |= {'expectedControlWitnesses', 'modelReportPath', 'requiredModelWitnesses', 'requiredMutantWitnesses'}
+        if set(stage)!=expected_stage_keys:
             raise ProtocolError('invalid frozen stage shape')
         if stage['cwd']!='{candidate}': raise ProtocolError('cwd must be {candidate}')
         positive(stage['timeoutSeconds'],'timeoutSeconds')
@@ -125,7 +202,6 @@ def validate_config(config):
         for arg in argv:
             if re.search(r'[{}]',arg.replace('{candidate}','').replace('{output}','')):
                 raise ProtocolError('only candidate/output substitutions allowed')
-        protocol=stage['verdictProtocol']
         if protocol=='async-comparator':
             if argv[:3]==['python3','-m','verification.async_verify']: rest=argv[3:]
             elif argv[:2] in (['bash','scripts/async-verify.sh'],['bash','{candidate}/scripts/async-verify.sh']):
@@ -147,6 +223,48 @@ def validate_config(config):
                 raise ProtocolError('full protocol requires bash scripts/verify.sh {output}/...')
             relative(argv[2][len('{output}/'):])
             primary=argv[2][len('{output}/'):].rstrip('/')+'/report.md'; validator='full-report'
+        elif protocol=='integration-comparator':
+            if name not in INTEGRATION_PLATFORMS or stage['expectedPlatforms']!=INTEGRATION_PLATFORMS[name]:
+                raise ProtocolError('integration stage/platform membership is not frozen')
+            required_ids=stage['requiredScenarioIds']
+            if (not isinstance(required_ids,list) or not required_ids
+                    or any(not isinstance(value,str) or not value for value in required_ids)
+                    or len(set(required_ids))!=len(required_ids)):
+                raise ProtocolError('integration requiredScenarioIds must be unique nonempty strings')
+            if name=='integration-red' and required_ids!=['APP-02','APP-04']:
+                raise ProtocolError('integration-red requires the frozen APP-02 and APP-04 unsafe witnesses')
+            if name == 'integration-controls':
+                witnesses = stage['expectedControlWitnesses']
+                if not isinstance(witnesses, dict) or witnesses != INTEGRATION_CONTROL_WITNESSES:
+                    raise ProtocolError('integration-controls must freeze the exact per-control witness inventory')
+                if required_ids != list(INTEGRATION_CONTROL_WITNESSES):
+                    raise ProtocolError('integration-controls scenario inventory differs from frozen controls')
+                if stage['modelReportPath'] != 'model/baseline/report.json':
+                    raise ProtocolError('integration-controls model report path is fixed')
+                if stage['requiredModelWitnesses'] != MODEL_REQUIRED_WITNESSES:
+                    raise ProtocolError('integration-controls model witness inventory is fixed')
+                if stage['requiredMutantWitnesses'] != MODEL_MUTANT_WITNESSES:
+                    raise ProtocolError('integration-controls mutant witness inventory is fixed')
+            if name in {'candidate-ios','candidate-android','integration-controls'}:
+                trace_contract = (INTEGRATION_CONTROL_TRACE_VARIANTS if name=='integration-controls'
+                                  else INTEGRATION_TRACE_VARIANTS)
+                if required_ids != list(trace_contract):
+                    raise ProtocolError('native stage scenario inventory differs from the frozen variant inventory')
+                expected_bindings = [
+                    {'platform':platform,'scenarioId':scenario_id,'variantId':variant_id}
+                    for platform in stage['expectedPlatforms']
+                    for scenario_id in required_ids
+                    for variant_id in trace_contract[scenario_id]
+                ]
+                if stage['expectedTraceBindings'] != expected_bindings:
+                    raise ProtocolError('native stage trace-binding inventory differs from the frozen scenarios and variants')
+            elif {'expectedControlWitnesses', 'modelReportPath', 'requiredModelWitnesses', 'requiredMutantWitnesses'} & set(stage):
+                raise ProtocolError('control/model fields are only valid for integration-controls')
+            expected_argv=['python3','-m','integration.reproduce','stage','--candidate','{candidate}',
+                           '--stage',name,'--output','{output}/'+name]
+            if argv!=expected_argv:
+                raise ProtocolError('integration comparator requires the known frozen reproduce entry point')
+            primary=name+'/report.json'; validator='integration-report'
         else: raise ProtocolError('unknown verdict protocol')
         artifacts=stage['requiredArtifacts']
         if not isinstance(artifacts,list) or not artifacts: raise ProtocolError('required artifacts missing')
@@ -154,11 +272,31 @@ def validate_config(config):
         for artifact in artifacts:
             if not isinstance(artifact,dict) or set(artifact)!= {'path','validator'}: raise ProtocolError('invalid artifact shape')
             relative(artifact['path'])
-            if artifact['path'] in seen or artifact['validator'] not in ('async-report','full-report','json-object','file'):
+            if artifact['path'] in seen or artifact['validator'] not in ('async-report','full-report','integration-report','model-report','model-mutant-report','json-object','file'):
                 raise ProtocolError('invalid/duplicate artifact')
-            if artifact['validator'] in ('async-report','full-report') and artifact != {'path':primary,'validator':validator}:
+            if artifact['validator'] in ('async-report','full-report','integration-report') and artifact != {'path':primary,'validator':validator}:
                 raise ProtocolError('only the stage primary report may supply its verdict')
+            if artifact['validator'] == 'model-report' and (
+                name != 'integration-controls'
+                or artifact['path'] != name + '/' + stage['modelReportPath']
+            ):
+                raise ProtocolError('only the frozen integration-controls model report is allowed')
+            if artifact['validator'] == 'model-mutant-report' and (
+                name != 'integration-controls'
+                or artifact['path'] not in {
+                    name + '/model/mutants/' + mutant + '/report.json'
+                    for mutant in stage['requiredMutantWitnesses']
+                }
+            ):
+                raise ProtocolError('only the frozen integration-controls mutant reports are allowed')
             seen.add(artifact['path'])
+        if integration_stage and name == 'integration-controls' and {'path':name+'/'+stage['modelReportPath'],'validator':'model-report'} not in artifacts:
+            raise ProtocolError('integration-controls requires its checked finite-model report')
+        if integration_stage and name == 'integration-controls' and any(
+            {'path':name+'/model/mutants/'+mutant+'/report.json','validator':'model-mutant-report'} not in artifacts
+            for mutant in stage['requiredMutantWitnesses']
+        ):
+            raise ProtocolError('integration-controls requires each named mutant counterexample report')
         if {'path':primary,'validator':validator} not in artifacts: raise ProtocolError('known primary report required')
 
 
@@ -187,7 +325,10 @@ def snapshot(root, config):
     for base,dirs,files in os.walk(root,followlinks=False):
         for name in list(dirs)+files:
             path=Path(base)/name; rel=path.relative_to(root).as_posix()
-            excluded=matches(rel,config['ignoredPaths']) and not matches(rel,config['protectedPaths'])
+            generated_caches=[item for item in config['ignoredPaths']
+                              if item.endswith('/__pycache__/') or item=='**/.DS_Store']
+            excluded=(matches(rel,generated_caches)
+                      or (matches(rel,config['ignoredPaths']) and not matches(rel,config['protectedPaths'])))
             has_protected_descendant=any(p.startswith(rel+'/') for p in protected)
             if excluded and not has_protected_descendant:
                 if name in dirs: dirs.remove(name)
@@ -303,15 +444,381 @@ def async_report(path):
     return report
 
 
-def read_artifacts(output, stage, started_ns):
+def string_array(value, label):
+    if (not isinstance(value,list) or any(not isinstance(item,str) or not item for item in value)
+            or len(value)!=len(set(value))):
+        raise ProtocolError(label+' must be an array of unique nonempty strings')
+    return value
+
+
+def model_report(path, required_witnesses):
+    report=json.loads(path.read_text())
+    keys={'version','classification','mutant','bounds','exploredStates','invariantChecks',
+          'coverageBoundary','coverageExhaustiveWithinBound','searchComplete','limitReached',
+          'abstraction','claims','witnesses','counterexample','missingCoverage','unexpectedMutantViolations','unexpectedMutantWitnesses'}
+    if not isinstance(report,dict) or set(report)!=keys:
+        raise ProtocolError('malformed finite-model report')
+    if type(report['version']) is not int or report['version']!=1 or report['classification']!='PASS' or report['mutant'] is not None:
+        raise ProtocolError('model report must be the successful non-mutant exploration')
+    if report['bounds']!=MODEL_BOUNDS:
+        raise ProtocolError('model finite bounds differ from the frozen integration contract')
+    for field in ('exploredStates',):
+        if type(report[field]) is not int or report[field]<=0:
+            raise ProtocolError('model report state counts must be positive integers')
+    if any(type(report[field]) is not bool for field in ('coverageBoundary','coverageExhaustiveWithinBound','searchComplete','limitReached')):
+        raise ProtocolError('model coverage flags must be booleans')
+    if (not report['searchComplete'] or report['limitReached'] or not report['coverageExhaustiveWithinBound']
+            or report['coverageExhaustiveWithinBound'] != (report['searchComplete'] and not report['limitReached'])):
+        raise ProtocolError('model report does not establish exhaustive search within the declared bound')
+    checks=report['invariantChecks']
+    if (not isinstance(checks,dict) or set(checks)!={'statesExamined','violations'}
+            or type(checks['statesExamined']) is not int or checks['statesExamined']<report['exploredStates']
+            or checks['violations']!=[]):
+        raise ProtocolError('model invariant-check summary is incomplete or failed')
+    claims=report['claims']
+    if not isinstance(claims,dict) or claims!={'unboundedLiveness':False,'arbitraryNativeRefinement':False}:
+        raise ProtocolError('model report overstates its guarantee boundary')
+    abstraction=report['abstraction']
+    if (not isinstance(abstraction,dict) or set(abstraction)!={'environment','excludedNoOps','execution'}
+            or any(not isinstance(abstraction[key],str) or not abstraction[key] for key in ('environment','execution'))
+            or not isinstance(abstraction['excludedNoOps'],list)
+            or any(not isinstance(item,str) or not item for item in abstraction['excludedNoOps'])):
+        raise ProtocolError('model abstraction disclosure is malformed')
+    if (report['counterexample'] is not None or report['missingCoverage']!=[]
+            or report['unexpectedMutantViolations']!=[] or report['unexpectedMutantWitnesses']!={}):
+        raise ProtocolError('passing model report cannot omit witnesses or contain a counterexample')
+    if not isinstance(required_witnesses,list) or not required_witnesses or len(required_witnesses)!=len(set(required_witnesses)):
+        raise ProtocolError('frozen model witness inventory is malformed')
+    witnesses=report['witnesses']
+    if not isinstance(witnesses,dict) or set(witnesses)!=set(required_witnesses):
+        raise ProtocolError('model witness membership differs from the frozen inventory')
+    from integration import model as finite_model
+    search=finite_model._search()
+    expected=finite_model._base_report(
+        search['classification'],search['exploredStates'],search['statesExamined'],search['witnesses'],
+        mutant=None,counterexample=search['counterexample'],missing=search['missingCoverage'],
+        boundary=search['boundary'],search_complete=search.get('searchComplete',False),
+        limit_reached=search.get('limitReached',False),unexpected_violations=search.get('unexpectedViolations',[]),
+        unexpected_witnesses=search.get('unexpectedWitnesses',{}),
+    )
+    expected['invariantChecks']['violations']=[] if search['classification']=='PASS' else ([search['counterexample']['invariant']] if search['counterexample'] else [])
+    if report!=expected:
+        raise ProtocolError('model report differs from a fresh bounded exploration')
+    for name in required_witnesses:
+        try:
+            finite_model.replay_coverage_witness(name,witnesses[name])
+        except (AssertionError,KeyError,TypeError,ValueError) as error:
+            raise ProtocolError(f'model witness {name!r} failed transition replay: {error}') from error
+    return report
+
+
+def model_mutant_report(path, mutant, expected_invariants):
+    report=json.loads(path.read_text())
+    keys={'version','classification','mutant','bounds','exploredStates','invariantChecks',
+          'coverageBoundary','coverageExhaustiveWithinBound','searchComplete','limitReached',
+          'abstraction','claims','witnesses','counterexample','missingCoverage','unexpectedMutantViolations','unexpectedMutantWitnesses'}
+    if not isinstance(report,dict) or set(report)!=keys:
+        raise ProtocolError('malformed model mutant report')
+    if (type(report['version']) is not int or report['version']!=1
+            or report['classification']!='SEMANTIC_FAIL' or report['mutant']!=mutant):
+        raise ProtocolError('model mutant report identity/classification mismatch')
+    if report['bounds']!=MODEL_BOUNDS:
+        raise ProtocolError('model mutant finite bounds differ from the frozen contract')
+    if type(report['exploredStates']) is not int or report['exploredStates']<=0:
+        raise ProtocolError('model mutant state count must be positive')
+    if (not isinstance(report['searchComplete'],bool) or not isinstance(report['limitReached'],bool)
+            or not isinstance(report['coverageExhaustiveWithinBound'],bool)
+            or not isinstance(report['coverageBoundary'],bool)
+            or (report['searchComplete'] and report['limitReached'])
+            or report['coverageExhaustiveWithinBound'] != (report['searchComplete'] and not report['limitReached'])):
+        raise ProtocolError('model mutant finite-search flags are inconsistent')
+    missing_coverage=string_array(report['missingCoverage'],'model mutant missingCoverage')
+    if missing_coverage and not report['limitReached']:
+        raise ProtocolError('model mutant coverage gaps require a disclosed search cutoff')
+    unexpected=string_array(report['unexpectedMutantViolations'],'unexpectedMutantViolations') if report['unexpectedMutantViolations'] else []
+    if any(invariant not in {f'I{i}' for i in range(1,10)} or invariant in expected_invariants for invariant in unexpected):
+        raise ProtocolError('model mutant unexpected invariant summary is malformed')
+    if not isinstance(report['unexpectedMutantWitnesses'],dict) or set(report['unexpectedMutantWitnesses'])!=set(unexpected):
+        raise ProtocolError('model mutant unexpected witnesses do not match the disclosed violation families')
+    if report['claims']!={'unboundedLiveness':False,'arbitraryNativeRefinement':False}:
+        raise ProtocolError('model mutant report overstates its guarantee boundary')
+    counterexample=report['counterexample']
+    if not isinstance(counterexample,dict) or set(counterexample)!={'invariant','trace','finalState'}:
+        raise ProtocolError('model mutant report lacks a concrete counterexample')
+    if counterexample['invariant'] not in expected_invariants:
+        raise ProtocolError('model mutant counterexample is outside its frozen target invariant set')
+    checks=report['invariantChecks']
+    if (not isinstance(checks,dict) or set(checks)!={'statesExamined','violations'}
+            or type(checks['statesExamined']) is not int or checks['statesExamined']<=0
+            or checks['violations']!=[counterexample['invariant']]):
+        raise ProtocolError('model mutant invariant summary disagrees with its counterexample')
+    from integration import model as finite_model
+    search=finite_model._search(mutant)
+    expected=finite_model._base_report(
+        search['classification'],search['exploredStates'],search['statesExamined'],search['witnesses'],
+        mutant=mutant,counterexample=search['counterexample'],missing=search['missingCoverage'],
+        boundary=search['boundary'],search_complete=search.get('searchComplete',False),
+        limit_reached=search.get('limitReached',False),unexpected_violations=search.get('unexpectedViolations',[]),
+        unexpected_witnesses=search.get('unexpectedWitnesses',{}),
+    )
+    expected['invariantChecks']['violations']=[] if search['classification']=='PASS' else ([search['counterexample']['invariant']] if search['counterexample'] else [])
+    if report!=expected:
+        raise ProtocolError('model mutant report differs from a fresh bounded exploration')
+    try:
+        replayed=finite_model.replay_trace(counterexample['trace'],mutant=mutant)
+    except (AssertionError,KeyError,TypeError,ValueError) as error:
+        raise ProtocolError(f'model mutant counterexample failed transition replay: {error}') from error
+    if (replayed['trace']!=counterexample['trace'] or counterexample['invariant'] not in replayed['violations']
+            or replayed['state']!=counterexample['finalState']):
+        raise ProtocolError('model mutant counterexample disagrees with transition replay')
+    for invariant,witness in report['unexpectedMutantWitnesses'].items():
+        if not isinstance(witness,dict) or set(witness)!={'trace','finalState'}:
+            raise ProtocolError('model mutant unexpected invariant witness is malformed')
+        try:
+            replayed_extra=finite_model.replay_trace(witness['trace'],mutant=mutant,stop_on_target=False)
+        except (AssertionError,KeyError,TypeError,ValueError) as error:
+            raise ProtocolError(f'unexpected model invariant {invariant!r} failed replay: {error}') from error
+        if (replayed_extra['trace']!=witness['trace'] or invariant not in replayed_extra['violations']
+                or replayed_extra['state']!=witness['finalState']):
+            raise ProtocolError(f'unexpected model invariant {invariant!r} witness disagrees with replay')
+    return report
+
+
+def reference(value, command, *, allow_zero=False):
+    fields={'processInstanceId','id'} if command else {'processInstanceId','localSequence'}
+    number='id' if command else 'localSequence'
+    minimum=0 if allow_zero else 1
+    return (isinstance(value,dict) and set(value)==fields
+            and isinstance(value.get('processInstanceId'),str) and bool(value['processInstanceId'])
+            and type(value.get(number)) is int and minimum<=value[number]<=9223372036854775807)
+
+
+def integration_report(path, stage):
+    report=json.loads(path.read_text())
+    keys={'version','stageId','classification','requiredScenarioIds','platformResults','violations',
+          'deviceHashes','buildHashes','requiredArtifacts'}
+    has_control_contract='expectedControlWitnesses' in stage
+    has_trace_contract='expectedTraceBindings' in stage
+    if has_control_contract: keys.add('controlResults')
+    if has_trace_contract: keys.add('traceBindings')
+    if not isinstance(report,dict) or set(report)!=keys:
+        raise ProtocolError('malformed integration report')
+    primary=next(item['path'] for item in stage['requiredArtifacts'] if item['validator']=='integration-report')
+    frozen_stage_id=primary.split('/',1)[0]
+    if type(report['version']) is not int or report['version']!=1 or report['stageId']!=frozen_stage_id:
+        raise ProtocolError('invalid integration report version/stage')
+    if not isinstance(report['classification'],str) or report['classification'] not in VERDICT_VALUES:
+        raise ProtocolError('invalid integration report classification')
+    required=string_array(report['requiredScenarioIds'],'requiredScenarioIds')
+    if required!=stage['requiredScenarioIds']:
+        raise ProtocolError('integration report scenario inventory differs from frozen stage')
+    expected_artifacts=[item['path'] for item in stage['requiredArtifacts'] if item['validator']!='integration-report']
+    platform_artifacts=[item['path'] for item in stage['requiredArtifacts']
+                        if item['validator'] not in ('integration-report','model-report','model-mutant-report')]
+    artifacts=string_array(report['requiredArtifacts'],'requiredArtifacts')
+    for artifact in artifacts: relative(artifact)
+    if artifacts!=expected_artifacts:
+        raise ProtocolError('integration report artifact membership differs from frozen stage')
+
+    rows=report['platformResults']
+    if not isinstance(rows,list): raise ProtocolError('platformResults must be an array')
+    row_keys={'platform','classification','requiredScenarioIds','completedScenarioIds','missingScenarioIds',
+              'deviceHash','buildHash','requiredArtifacts'}
+    if has_control_contract: row_keys.add('scenarioBuildHashes')
+    if has_trace_contract: row_keys.add('validationScope')
+    platforms=[]
+    for row in rows:
+        if not isinstance(row,dict) or set(row)!=row_keys:
+            raise ProtocolError('integration platform result has invalid fields')
+        platform=row['platform']
+        if (not isinstance(platform,str) or platform not in {'evaluator','ios','android'}
+                or platform not in stage['expectedPlatforms'] or platform in platforms):
+            raise ProtocolError('integration report has duplicate or undeclared platform')
+        platforms.append(platform)
+        if not isinstance(row['classification'],str) or row['classification'] not in VERDICT_VALUES:
+            raise ProtocolError('integration platform classification is invalid')
+        if string_array(row['requiredScenarioIds'],'platform requiredScenarioIds')!=required:
+            raise ProtocolError('platform scenario inventory differs from report inventory')
+        completed=string_array(row['completedScenarioIds'],'completedScenarioIds')
+        missing=string_array(row['missingScenarioIds'],'missingScenarioIds')
+        if not set(completed)<=set(required) or set(completed)&set(missing) or set(completed)|set(missing)!=set(required):
+            raise ProtocolError('platform scenario completion set is inconsistent')
+        if has_trace_contract:
+            scope=row.get('validationScope')
+            if scope not in {'ci','local-observed','not-run'}:
+                raise ProtocolError('native platform validation scope is invalid')
+            if completed and scope not in {'ci','local-observed'}:
+                raise ProtocolError('completed native history lacks an explicit validation scope')
+        row_artifacts=string_array(row['requiredArtifacts'],'platform requiredArtifacts')
+        for artifact in row_artifacts: relative(artifact)
+        if not set(row_artifacts)<=set(platform_artifacts):
+            raise ProtocolError('platform reports an undeclared artifact')
+        if has_control_contract:
+            build_index=row.get('scenarioBuildHashes')
+            if not isinstance(build_index,dict) or not set(build_index)<=set(required):
+                raise ProtocolError('control platform scenarioBuildHashes is malformed')
+            if any(not isinstance(value,str) or not SHA256.fullmatch(value) for value in build_index.values()):
+                raise ProtocolError('control case build hash must be sha256 hex')
+            if not set(build_index)<=set(completed):
+                raise ProtocolError('control build hash exists for an incomplete scenario')
+            if (row['classification'] in {'PASS','SEMANTIC_FAIL'}
+                    and set(completed)==set(required) and set(build_index)!=set(required)):
+                raise ProtocolError('complete control platform result omits per-control build hashes')
+        for field in ('deviceHash','buildHash'):
+            value=row[field]
+            if value is not None and (not isinstance(value,str) or not SHA256.fullmatch(value)):
+                raise ProtocolError('device/build hash must be sha256 hex or null')
+            if platform=='evaluator' and value is not None:
+                raise ProtocolError('evaluator fixture cannot claim a native device/build hash')
+            if (platform in {'ios','android'} and row['classification'] in {'PASS','SEMANTIC_FAIL'}
+                    and set(row['completedScenarioIds'])==set(required) and value is None
+                    and not (has_control_contract and field=='buildHash'
+                             and set(row['scenarioBuildHashes'])==set(required))):
+                raise ProtocolError('complete native result must bind device and build hashes')
+
+    if not isinstance(report['deviceHashes'],dict) or not isinstance(report['buildHashes'],dict):
+        raise ProtocolError('deviceHashes and buildHashes must be objects')
+    if set(report['deviceHashes'])!=set(platforms) or set(report['buildHashes'])!=set(platforms):
+        raise ProtocolError('device/build hash membership differs from platform results')
+    for row in rows:
+        if report['deviceHashes'][row['platform']]!=row['deviceHash'] or report['buildHashes'][row['platform']]!=row['buildHash']:
+            raise ProtocolError('device/build hash summary differs from platform result')
+
+    if has_trace_contract:
+        expected_bindings={(row['platform'],row['scenarioId'],row['variantId']) for row in stage['expectedTraceBindings']}
+        trace_bindings=report['traceBindings']
+        if not isinstance(trace_bindings,list):
+            raise ProtocolError('traceBindings must be an array')
+        seen_bindings=set()
+        platform_rows={row['platform']:row for row in rows}
+        for binding in trace_bindings:
+            if not isinstance(binding,dict) or set(binding)!={'platform','scenarioId','variantId','buildHash'}:
+                raise ProtocolError('trace binding has invalid fields')
+            platform,scenario_id,variant_id=binding['platform'],binding['scenarioId'],binding['variantId']
+            key=(platform,scenario_id,variant_id)
+            if key not in expected_bindings or key in seen_bindings:
+                raise ProtocolError('trace binding is undeclared or duplicated')
+            seen_bindings.add(key)
+            build_hash=binding['buildHash']
+            if not isinstance(build_hash,str) or not SHA256.fullmatch(build_hash):
+                raise ProtocolError('trace binding build hash must be sha256 hex')
+            expected_build = (
+                platform_rows[platform]['scenarioBuildHashes'].get(scenario_id)
+                if has_control_contract and platform in platform_rows
+                else platform_rows[platform]['buildHash'] if platform in platform_rows else None
+            )
+            if platform not in platform_rows or expected_build!=build_hash:
+                raise ProtocolError('trace build hash differs from its owning platform result')
+        if report['classification'] in {'PASS','SEMANTIC_FAIL'} and seen_bindings!=expected_bindings:
+            raise ProtocolError('complete native report omits a scenario/variant trace binding')
+
+    violations=report['violations']
+    if not isinstance(violations,list): raise ProtocolError('violations must be an array')
+    violation_keys={'scenarioId','invariant','commandRef','eventRef','expected','actual'}
+    for violation in violations:
+        if not isinstance(violation,dict) or set(violation)!=violation_keys:
+            raise ProtocolError('integration violation has invalid fields')
+        if not isinstance(violation['scenarioId'],str) or not violation['scenarioId']:
+            raise ProtocolError('integration violation scenarioId is invalid')
+        semantic=report['classification']=='SEMANTIC_FAIL'
+        if semantic:
+            if (violation['scenarioId'] not in required or not isinstance(violation['invariant'],str)
+                    or violation['invariant'] not in {f'I{i}' for i in range(1,10)}):
+                raise ProtocolError('semantic violation lacks a frozen scenario/invariant')
+            if not reference(violation['commandRef'],True) or not reference(violation['eventRef'],False):
+                raise ProtocolError('semantic violation lacks positive command/event provenance')
+            if violation['expected']==violation['actual']:
+                raise ProtocolError('semantic violation does not contain a concrete mismatch')
+        else:
+            if not isinstance(violation['invariant'],str) or not violation['invariant']:
+                raise ProtocolError('nonsemantic violation invariant is invalid')
+            if not reference(violation['commandRef'],True,allow_zero=True) or not reference(violation['eventRef'],False,allow_zero=True):
+                raise ProtocolError('nonsemantic violation references are malformed')
+    if has_control_contract:
+        control_rows=report['controlResults']
+        if not isinstance(control_rows,list):
+            raise ProtocolError('integration control results must be an array')
+        control_ids=stage['requiredScenarioIds']
+        expected_witnesses=stage['expectedControlWitnesses']
+        control_pairs=set()
+        for control in control_rows:
+            if not isinstance(control,dict) or set(control)!={'platform','controlId','classification','observedWitnesses'}:
+                raise ProtocolError('integration control result has invalid fields')
+            platform,control_id=control['platform'],control['controlId']
+            if platform not in stage['expectedPlatforms'] or control_id not in control_ids:
+                raise ProtocolError('integration control result names an undeclared platform/control')
+            pair=(platform,control_id)
+            if pair in control_pairs:
+                raise ProtocolError('duplicate platform/control result')
+            control_pairs.add(pair)
+            if control['classification'] not in {'DETECTED','NOT_DETECTED'}:
+                raise ProtocolError('integration control result classification is invalid')
+            observed=string_array(control['observedWitnesses'],'control observedWitnesses')
+            if any(invariant not in {f'I{i}' for i in range(1,10)} for invariant in observed):
+                raise ProtocolError('integration control result has an unknown invariant witness')
+            required=expected_witnesses[control_id]
+            if control['classification']=='DETECTED' and not set(required)<=set(observed):
+                raise ProtocolError('control is marked detected without its frozen invariant witness')
+            if control['classification']=='NOT_DETECTED' and set(required)<=set(observed):
+                raise ProtocolError('control is marked not detected despite containing every required witness')
+        complete_control_pairs={(platform,control_id) for platform in stage['expectedPlatforms'] for control_id in control_ids}
+        if report['classification'] in {'PASS','SEMANTIC_FAIL'} and control_pairs!=complete_control_pairs:
+            raise ProtocolError('completed integration-control report omits a platform/control result')
+        if report['classification']=='PASS' and any(row['classification']!='DETECTED' for row in control_rows):
+            raise ProtocolError('integration-controls cannot pass unless every mutation witness was detected')
+        model_path=Path(path).parent/stage['modelReportPath']
+        if not model_path.is_file():
+            raise ProtocolError('integration-controls model report is missing')
+        model_report(model_path,stage['requiredModelWitnesses'])
+        for mutant, invariants in stage['requiredMutantWitnesses'].items():
+            mutant_path=Path(path).parent/'model'/'mutants'/mutant/'report.json'
+            if not mutant_path.is_file():
+                raise ProtocolError('integration-controls mutant model report is missing: '+mutant)
+            model_mutant_report(mutant_path,mutant,invariants)
+
+    if report['classification']=='SEMANTIC_FAIL':
+        if not violations or not any(row['classification']=='SEMANTIC_FAIL' for row in rows):
+            raise ProtocolError('semantic integration report requires a platform failure and concrete mismatches')
+        if report['stageId']=='integration-red':
+            observed={scenario:set() for scenario in required}
+            for violation in violations:
+                observed[violation['scenarioId']].add(violation['invariant'])
+            for scenario, invariants in INTEGRATION_RED_WITNESSES.items():
+                if not invariants<=observed.get(scenario,set()):
+                    raise ProtocolError('integration-red lacks its scenario-specific unsafe witness invariants')
+    elif report['classification']=='PASS':
+        if violations or any(row['classification']!='PASS' for row in rows):
+            raise ProtocolError('PASS integration report cannot contain violations or failed platform results')
+    elif report['classification']=='INVALID_HISTORY':
+        if not violations or not any(row['classification']=='INVALID_HISTORY' for row in rows):
+            raise ProtocolError('INVALID_HISTORY report requires a concrete invalid platform history')
+    return report
+
+
+def read_artifacts(output, stage, started_ns, *, verify_mtime=True):
     hashes={}
     for artifact in stage['requiredArtifacts']:
         p=contained(output,artifact['path'])
-        if not p.is_file() or p.stat().st_mtime_ns<started_ns: raise ProtocolError('missing or stale artifact: '+artifact['path'])
+        if not p.is_file(): raise ProtocolError('missing artifact: '+artifact['path'])
+        # Artifact downloads can rewrite extraction mtimes. Portable ledger
+        # verification binds the original record and byte hashes instead.
+        if verify_mtime and p.stat().st_mtime_ns<started_ns:
+            raise ProtocolError('missing or stale artifact: '+artifact['path'])
         data=p.read_bytes()
         if not data: raise ProtocolError('empty artifact: '+artifact['path'])
         validator=artifact['validator']
         if validator=='async-report': async_report(p)
+        if validator=='integration-report': integration_report(p,stage)
+        if validator=='model-report':
+            if 'requiredModelWitnesses' not in stage: raise ProtocolError('model report is outside a model-bound stage')
+            model_report(p,stage['requiredModelWitnesses'])
+        if validator=='model-mutant-report':
+            relative_path=artifact['path'].split('/')
+            if len(relative_path)!=5: raise ProtocolError('model mutant artifact path is malformed')
+            mutant=relative_path[3]
+            if mutant not in stage.get('requiredMutantWitnesses',{}):
+                raise ProtocolError('model mutant artifact is undeclared by the stage')
+            model_mutant_report(p,mutant,stage['requiredMutantWitnesses'][mutant])
         if validator=='json-object' and not isinstance(json.loads(data),dict): raise ProtocolError('artifact must be a JSON object')
         if validator=='full-report' and p.read_text().splitlines()[0] not in ('Overall: PASS','Overall: FAIL') and not p.read_text().splitlines()[0].startswith('Overall: INCOMPLETE'):
             raise ProtocolError('malformed aggregate report')
@@ -328,11 +835,41 @@ def captured_evidence(output, argv, cwd):
 
 def classify(stage, exit_code, timed_out, output):
     if timed_out or exit_code is None or exit_code<0: return 'INFRA_FAILURE'
-    primary=next(a for a in stage['requiredArtifacts'] if a['validator'] in ('async-report','full-report'))
+    primary=next(a for a in stage['requiredArtifacts'] if a['validator'] in ('async-report','full-report','integration-report'))
     if stage['verdictProtocol']=='full-gate':
         line=(output/primary['path']).read_text().splitlines()[0]
         if exit_code!=0: return 'INFRA_FAILURE'
         return 'PASS' if line=='Overall: PASS' else ('NOT_RUN' if line.startswith('Overall: INCOMPLETE') else 'INFRA_FAILURE')
+    if stage['verdictProtocol']=='integration-comparator':
+        report=integration_report(output/primary['path'],stage)
+        if any(row.get('validationScope')=='local-observed' for row in report['platformResults']):
+            return 'INCONCLUSIVE'
+        statuses=[report['classification']]+[row['classification'] for row in report['platformResults']]
+        if 'INFRA_FAILURE' in statuses: return 'INFRA_FAILURE'
+        if 'INVALID_HISTORY' in statuses:
+            return 'INVALID_HISTORY' if exit_code==1 else 'INFRA_FAILURE'
+        if 'NOT_RUN' in statuses: return 'NOT_RUN'
+        if 'INCONCLUSIVE' in statuses: return 'INCONCLUSIVE'
+        rows={row['platform']:row for row in report['platformResults']}
+        if set(rows)!=set(stage['expectedPlatforms']): return 'INCONCLUSIVE'
+        required=set(stage['requiredScenarioIds'])
+        for row in rows.values():
+            if set(row['completedScenarioIds'])!=required or row['missingScenarioIds']:
+                return 'INCONCLUSIVE'
+        membership=set().union(*(set(row['requiredArtifacts']) for row in rows.values()))
+        required_artifacts={item['path'] for item in stage['requiredArtifacts']
+                            if item['validator'] not in ('integration-report','model-report','model-mutant-report')}
+        if membership!=required_artifacts: return 'INCONCLUSIVE'
+        if report['classification']=='PASS':
+            if exit_code==0 and all(row['classification']=='PASS' for row in rows.values()): return 'PASS'
+            return 'INFRA_FAILURE'
+        if report['classification']=='SEMANTIC_FAIL':
+            if exit_code==1 and report['violations'] and any(row['classification']=='SEMANTIC_FAIL' for row in rows.values()):
+                return 'SEMANTIC_FAIL'
+            return 'INFRA_FAILURE'
+        if report['classification']=='INCONCLUSIVE': return 'INCONCLUSIVE'
+        if report['classification']=='NOT_RUN': return 'NOT_RUN'
+        return 'INFRA_FAILURE'
     report=async_report(output/primary['path']); values=report['verdicts'].values()
     if 'INFRA_FAILURE' in values: return 'INFRA_FAILURE'
     if 'NOT_RUN' in values: return 'NOT_RUN'
@@ -373,14 +910,23 @@ def run(manifest_path, expected, candidate, stage_id, attempt_id, attempt_metada
             attempts.append(p)
         elapsed=0.0
         active=False
+        stage_attempts=0
         for p in attempts:
             record_path=regular_file(p,'result.json')
             if not record_path.exists(): active=True; continue
             prior=json.loads(record_path.read_text())
             if prior['manifestDigest']!=expected: raise ProtocolError('mixed manifest ledger')
             elapsed+=prior['durationSeconds']
+            if prior.get('stageId')==stage_id: stage_attempts+=1
         if active: raise ProtocolError('unfinished attempt must be resolved before another run')
-        stopped=len(attempts)>=manifest['maxAttempts'] or elapsed>=manifest['maxTotalSeconds']
+        per_stage_limit=manifest['provenance'].get('maxAttemptsPerStage')
+        if manifest['changeId']=='standalone-native-app-integration':
+            if type(per_stage_limit) is not int or per_stage_limit<=0:
+                raise ProtocolError('frozen per-stage attempt limit is invalid')
+        else:
+            per_stage_limit=None
+        stopped=(len(attempts)>=manifest['maxAttempts'] or elapsed>=manifest['maxTotalSeconds']
+                 or (per_stage_limit is not None and stage_attempts>=per_stage_limit))
         output.mkdir(mode=0o700)
     start=time.monotonic(); start_ns=time.time_ns()
     result={'manifestDigest':expected,'candidateDigest':None,'stageId':stage_id,'attemptId':attempt_id,
@@ -391,10 +937,10 @@ def run(manifest_path, expected, candidate, stage_id, attempt_id, attempt_metada
     try:
         result['candidateDigest']=check_sources(manifest,candidate)
         if stopped:
-            result['detail']='stopped: repair/elapsed budget exhausted'
+            result['detail']='stopped: global or per-stage repair/elapsed budget exhausted'
         else:
             timeout=min(stage['timeoutSeconds'],manifest['maxTotalSeconds']-elapsed)
-            env=os.environ.copy(); env['PYTHONPATH']=str(candidate)
+            env=os.environ.copy(); env['PYTHONPATH']=str(candidate); env['PYTHONDONTWRITEBYTECODE']='1'
             with regular_file(output,'stdout.log').open('wb') as stdout, regular_file(output,'stderr.log').open('wb') as stderr:
                 proc=subprocess.Popen(result['argv'],cwd=candidate,env=env,stdout=stdout,stderr=stderr,start_new_session=True)
                 try: result['exitCode']=proc.wait(timeout=timeout)

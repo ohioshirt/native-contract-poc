@@ -1,0 +1,11 @@
+// Temporary compile-only source wiring for evaluator-owned helper validation.
+// This init script is passed explicitly and is never used by app packaging.
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.plugins.withId('com.android.application') {
+            def android = project.extensions.getByName('android')
+            android.sourceSets.debug.java.srcDir(project.file('../MutationFixtures'))
+            println("N2/N4 compile fixture source roots: ${android.sourceSets.debug.java.srcDirs}")
+        }
+    }
+}

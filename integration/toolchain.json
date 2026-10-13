@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "d2ce1847cb2644252f7c4d069ef9e36142bb327b",
+  "acceptancePins": {
+    "python": {
+      "commandTemplate": "python3",
+      "implementation": "CPython",
+      "version": "3.12.8"
+    },
+    "ios": {
+      "runnerImage": "macos-15",
+      "xcode": "16.2",
+      "simulatorRuntime": "iOS 18.2"
+    },
+    "android": {
+      "runnerImage": "ubuntu-24.04",
+      "jdk": "17.0.13+11",
+      "gradle": "8.13",
+      "gradleDistributionSha256": "20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78",
+      "androidGradlePlugin": "8.13.2",
+      "kotlin": "2.3.20",
+      "apiLevel": 35,
+      "systemImage": "google_apis;x86_64"
+    }
+  },
+  "localObserved": {
+    "pythonCommand": {
+      "executable": "/usr/bin/python3",
+      "version": "3.9.6",
+      "matchesAcceptancePin": false,
+      "status": "MISMATCH"
+    },
+    "testInterpreter": {
+      "executable": "~/.local/bin/python3.12",
+      "version": "3.12.9",
+      "matchesAcceptancePin": false,
+      "status": "MISMATCH"
+    },
+    "ownedAcceptanceInterpreter": {
+      "executable": "reports/standalone/task3/parent-python/cpython-3.12.8-macos-aarch64-none/bin/python3.12",
+      "version": "3.12.8",
+      "sha256": "d6b64f766d3b08326aa10cdb37c9d922e3af38b57ec07caa28b894e5fccf6e69",
+      "matchesAcceptancePin": true,
+      "status": "AVAILABLE"
+    },
+    "ownedPython3PathShim": {
+      "pathPrefix": "reports/standalone/task3/parent-toolchain-bin",
+      "shim": "reports/standalone/task3/parent-toolchain-bin/python3",
+      "resolvesAcceptancePinWhenPrepended": true,
+      "status": "AVAILABLE"
+    },
+    "ios": {
+      "xcode": "27.1",
+      "xcodeBuild": "27A9269",
+      "simulatorRuntime": "iOS 18.6",
+      "runtimeBuild": "22G86",
+      "runtimeIsAcceptancePin": false,
+      "ownedSimulatorEvidence": "reports/standalone/task3/parent-owned-simulator.json"
+    },
+    "android": {
+      "java": "Corretto 17.0.13+11",
+      "apiLevel": 35,
+      "systemImage": "google_apis;arm64-v8a",
+      "systemImageRevision": "9.0.0",
+      "sourcePropertiesSha256": "bd5cb4bc86ef478b0f37a034aa2b460165b391e8cb6504cb13b8ca1c462c4848",
+      "packageXmlSha256": "fe7c42ca2e1b2a9f08dee11930d6e230c6da35528bc8f720970e2d15ef285c4c",
+      "ownedAvdEvidence": "reports/standalone/task3/parent-owned-avd.json",
+      "deviceBooted": false
+    }
+  },
+  "localValidationScope": {
+    "id": "local-observed",
+    "classification": "LOCAL_VALIDATION_ONLY",
+    "python": {
+      "version": "3.12.8",
+      "matchesAcceptancePin": true
+    },
+    "ios": {
+      "xcode": "27.1",
+      "runtimeVersion": "18.6",
+      "runtimeBuild": "22G86",
+      "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.iOS-18-6",
+      "ownedDeviceEvidence": "reports/standalone/task3/parent-owned-simulator.json",
+      "ownedDeviceEvidenceSha256": "199184d338b061c6a17ade0858b7202c7a1ee93925d6efb6a0aa1e01e5084e81"
+    },
+    "android": {
+      "java": "Corretto 17.0.13+11",
+      "apiLevel": 35,
+      "abi": "arm64-v8a",
+      "imagePackage": "system-images;android-35;google_apis;arm64-v8a",
+      "imageRevision": "9.0.0",
+      "ownedDeviceEvidence": "reports/standalone/task3/parent-owned-avd.json",
+      "ownedDeviceEvidenceSha256": "9b681aba6b6e3fce3206fab16612fcb30f7a1bf3cbdd6648254ed63e5952e224",
+      "readinessEvidence": "reports/standalone/task3/parent-owned-emulator-readiness.json",
+      "readinessEvidenceSha256": "a2322b75bf2071ff8e5f20e5942b2d21f33db3eed5f91b00283727b899269e39"
+    },
+    "acceptedByCiAggregate": false,
+    "nativeRuntimeExecution": "NOT_RUN"
+  },
+  "pendingPinPreflight": {
+    "python3128LocalInstall": "PASS",
+    "ciProjectPackagePreflight": "NOT_RUN",
+    "iosCi162Runtime182": "NOT_RUN",
+    "androidDeviceRuntime": "NOT_RUN"
+  },
+  "ciActions": [
+    {
+      "repository": "actions/checkout",
+      "version": "v4.2.2",
+      "commit": "11bd71901bbe5b1630ceea73d27597364c9af683",
+      "source": "https://github.com/actions/checkout/releases/tag/v4.2.2"
+    },
+    {
+      "repository": "actions/setup-python",
+      "version": "v5.6.0",
+      "commit": "a26af69be951a213d495a4c3e4e4022e16d87065",
+      "source": "https://github.com/actions/setup-python/releases/tag/v5.6.0"
+    },
+    {
+      "repository": "actions/setup-java",
+      "version": "v4.9.1",
+      "commit": "cf277c60eb25467037889841efdb72551f06f6c3",
+      "source": "https://github.com/actions/setup-java/releases/tag/v4.9.1"
+    },
+    {
+      "repository": "maxim-lobanov/setup-xcode",
+      "version": "v1.7.0",
+      "commit": "ed7a3b1fda3918c0306d1b724322adc0b8cc0a90",
+      "source": "https://github.com/maxim-lobanov/setup-xcode/releases/tag/v1.7.0"
+    },
+    {
+      "repository": "actions/upload-artifact",
+      "version": "v4.6.2",
+      "commit": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "source": "https://github.com/actions/upload-artifact/releases/tag/v4.6.2"
+    },
+    {
+      "repository": "actions/download-artifact",
+      "version": "v4.3.0",
+      "commit": "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+      "source": "https://api.github.com/repos/actions/download-artifact/git/ref/tags/v4.3.0"
+    }
+  ],
+  "ciWorkflow": {
+    "path": ".github/workflows/integration.yml",
+    "scope": "full protected evaluator, pinned package preflight, split owned iOS/Android native stages, and source-bound cross-platform aggregation",
+    "deviceBootstrap": "scripts/ci-native-devices.py",
+    "stageAggregation": "integration.aggregate validates both portable ledgers and derives integration-controls",
+    "maxAttemptsPerStage": 2,
+    "maxAttemptsTotal": 10,
+    "runtimeExecution": "HOSTED_CI_NOT_RUN"
+  },
+  "python3128TestReruns": {
+    "verificationSuite": "PASS",
+    "integrationSuite": "PASS"
+  },
+  "evidenceCommands": {
+    "python3OwnedPath": "PATH=reports/standalone/task3/parent-toolchain-bin:$PATH python3 --version",
+    "pythonPinnedExecutable": "reports/standalone/task3/parent-python/cpython-3.12.8-macos-aarch64-none/bin/python3.12 --version",
+    "pythonDefaultReadback": "command -v python3; python3 --version",
+    "xcode": "xcodebuild -version",
+    "java": "java -version"
+  }
+}

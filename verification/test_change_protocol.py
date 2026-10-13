@@ -1,5 +1,6 @@
 """Real-process controls for the frozen change protocol."""
 import json
+import copy
 from pathlib import Path
 import subprocess
 import tempfile
@@ -22,6 +23,9 @@ class ChangeProtocolTests(unittest.TestCase):
             'verification/__init__.py': '',
             'scripts/change-protocol.sh': '# protected wrapper\n',
             'scripts/verify.sh': 'mkdir -p "$1"; echo "Overall: PASS" > "$1/report.md"\n',
+            'integration/__init__.py': '',
+            'integration/reproduce.py': '# fake integration stage entry point\n',
+            'integration/scenarios.json': '{"version":1,"scenarios":[]}\n',
             'contract/specification.json': '{}',
             'formal/model.tla': 'model',
             'ios/Sources/AsyncNativeContract/session.swift': 'native',
@@ -32,6 +36,7 @@ class ChangeProtocolTests(unittest.TestCase):
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content)
         self.writer('pass')
+        self.integration_writer('pass')
         subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
         subprocess.run(['git', '-C', str(self.root), '-c', 'user.name=Protocol Test', '-c', 'user.email=test@example.invalid', 'add', 'core.txt'], check=True)
         subprocess.run(['git', '-C', str(self.root), '-c', 'user.name=Protocol Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'baseline'], check=True)
@@ -40,7 +45,7 @@ class ChangeProtocolTests(unittest.TestCase):
             'changeId': 'test-change', 'baselineCommit': baseline,
             'allowedPaths': ['ios/Sources/AsyncNativeContract/'],
             'protectedPaths': ['reports/baseline/'],
-            'ignoredPaths': ['.git/', 'reports/', 'verification/__pycache__/'],
+            'ignoredPaths': ['.git/', 'reports/', 'verification/__pycache__/', 'integration/__pycache__/'],
             'outputRoot': 'reports/attempts',
             'maxAttempts': 3, 'maxTotalSeconds': 30,
             'metadata': {'modelId': 'test-model', 'reasoningEffort': 'high', 'arm': 'test', 'seed': None,
@@ -53,6 +58,18 @@ class ChangeProtocolTests(unittest.TestCase):
                 'full': {'argv': ['bash', 'scripts/verify.sh', '{output}/full'], 'cwd': '{candidate}',
                          'timeoutSeconds': 3, 'verdictProtocol': 'full-gate',
                          'requiredArtifacts': [{'path': 'full/report.md', 'validator': 'full-report'}]},
+                'integration-red': {
+                    'argv': ['python3', '-m', 'integration.reproduce', 'stage', '--candidate', '{candidate}',
+                             '--stage', 'integration-red', '--output', '{output}/integration-red'],
+                    'cwd': '{candidate}', 'timeoutSeconds': 3, 'verdictProtocol': 'integration-comparator',
+                    'expectedPlatforms': ['evaluator'],
+                    'requiredScenarioIds': ['APP-02', 'APP-04'],
+                    'requiredArtifacts': [
+                        {'path': 'integration-red/report.json', 'validator': 'integration-report'},
+                        {'path': 'integration-red/APP-02/trace.json', 'validator': 'json-object'},
+                        {'path': 'integration-red/APP-04/trace.json', 'validator': 'json-object'},
+                    ],
+                },
             },
         }
         self.manifest = self.root / 'reports/manifest.json'
@@ -83,6 +100,43 @@ raise SystemExit(1 if mode in ('semantic','infra','notrun','nonzero') else 0)
 """.replace('MODE', repr(mode))
         (self.root / 'verification/async_verify.py').write_text(body)
 
+    def integration_writer(self, mode):
+        body = '''import argparse, json, os, time
+from pathlib import Path
+p=argparse.ArgumentParser(); p.add_argument("command"); p.add_argument("--candidate",required=True); p.add_argument("--stage",required=True); p.add_argument("--output",required=True); a=p.parse_args()
+out=Path(a.output); out.mkdir(parents=True,exist_ok=True)
+required=["APP-02","APP-04"]
+paths=["integration-red/APP-02/trace.json","integration-red/APP-04/trace.json"]
+for scenario in required:
+ d=out/scenario; d.mkdir(parents=True,exist_ok=True); (d/"trace.json").write_text(json.dumps({"scenarioId":scenario}))
+mode=MODE
+classification="SEMANTIC_FAIL" if mode=="semantic" else ("INVALID_HISTORY" if mode=="invalid-history" else "PASS")
+row_status=classification
+platforms=[{"platform":"evaluator","classification":row_status,"requiredScenarioIds":required,"completedScenarioIds":required,"missingScenarioIds":[],"deviceHash":None,"buildHash":None,"requiredArtifacts":paths}]
+if mode=="missing-platform": platforms=[]
+if mode=="missing-scenario": platforms[0]["completedScenarioIds"]=["APP-02"]; platforms[0]["missingScenarioIds"]=["APP-04"]
+if mode=="missing-artifact": platforms[0]["requiredArtifacts"]=[paths[0]]
+violations=[]
+if mode=="semantic":
+ violations=[
+  {"scenarioId":"APP-02","invariant":"I2","commandRef":{"processInstanceId":"attempt-01/APP-02/p1","id":5},"eventRef":{"processInstanceId":"attempt-01/APP-02/p1","localSequence":25},"expected":"no credential mutation","actual":"unconditional stale commit"},
+  {"scenarioId":"APP-02","invariant":"I3","commandRef":{"processInstanceId":"attempt-01/APP-02/p1","id":5},"eventRef":{"processInstanceId":"attempt-01/APP-02/p1","localSequence":25},"expected":"Absent after Logout","actual":"old A credential present"},
+  {"scenarioId":"APP-04","invariant":"I4","commandRef":{"processInstanceId":"attempt-01/APP-04/p1","id":6},"eventRef":{"processInstanceId":"attempt-01/APP-04/p1","localSequence":31},"expected":"B remains present","actual":"old A credential replaces B"},
+ ]
+if mode=="invalid-history":
+ violations=[{"scenarioId":"APP-02","invariant":"HISTORY","commandRef":{"processInstanceId":"attempt-01/APP-02/p1","id":0},"eventRef":{"processInstanceId":"attempt-01/APP-02/p1","localSequence":0},"expected":"well-formed frozen evidence","actual":"invalid command event reference"}]
+if mode=="wrong-invariants": violations[0]["invariant"]="I6"
+if mode=="bad-semantic": violations=[]
+device_hashes={row["platform"]:row["deviceHash"] for row in platforms}
+build_hashes={row["platform"]:row["buildHash"] for row in platforms}
+report={"version":1,"stageId":a.stage,"classification":classification,"requiredScenarioIds":required,"platformResults":platforms,"violations":violations,"deviceHashes":device_hashes,"buildHashes":build_hashes,"requiredArtifacts":paths}
+(out/"report.json").write_text(json.dumps(report))
+if mode=="stale": os.utime(out/"APP-02"/"trace.json",(1,1))
+print("integration fixture output")
+raise SystemExit(1 if mode in ("semantic","invalid-history","exit-one-pass","bad-semantic","wrong-invariants") else 0)
+'''.replace('MODE', repr(mode))
+        (self.root / 'integration/reproduce.py').write_text(body)
+
     def freeze(self):
         self.revision = getattr(self, 'revision', -1) + 1
         self.config['outputRoot'] = 'reports/attempts' + (('-revision'+str(self.revision)) if self.revision else '')
@@ -108,6 +162,31 @@ raise SystemExit(1 if mode in ('semantic','infra','notrun','nonzero') else 0)
         self.assertEqual(protocol.check(self.manifest, self.digest, self.root)['classification'], 'PASS')
         self.assertEqual(protocol.check(self.manifest, self.digest, self.root, Path(result['outputDirectory']) / 'result.json')['classification'], 'INFRA_FAILURE')
 
+    def test_legacy_protocol_stages_keep_integration_reserved_names(self):
+        reserved_names = ('candidate-ios', 'candidate-android', 'integration-controls')
+        for name in reserved_names:
+            for protocol_name in ('async-comparator', 'full-gate'):
+                with self.subTest(stage=name, verdictProtocol=protocol_name):
+                    config = copy.deepcopy(self.config)
+                    if protocol_name == 'async-comparator':
+                        stage = {
+                            'argv': ['python3', '-m', 'verification.async_verify', '--output', f'{{output}}/{name}'],
+                            'cwd': '{candidate}',
+                            'timeoutSeconds': 3,
+                            'verdictProtocol': protocol_name,
+                            'requiredArtifacts': [{'path': f'{name}/async-report.json', 'validator': 'async-report'}],
+                        }
+                    else:
+                        stage = {
+                            'argv': ['bash', 'scripts/verify.sh', f'{{output}}/{name}'],
+                            'cwd': '{candidate}',
+                            'timeoutSeconds': 3,
+                            'verdictProtocol': protocol_name,
+                            'requiredArtifacts': [{'path': f'{name}/report.md', 'validator': 'full-report'}],
+                        }
+                    config['stages'] = {name: stage}
+                    protocol.validate_config(config)
+
     def test_protected_edit_add_delete_and_out_of_scope_new_source(self):
         for mode in ('edit', 'add', 'delete', 'outside', 'baseline'):
             with self.subTest(mode=mode):
@@ -127,6 +206,95 @@ raise SystemExit(1 if mode in ('semantic','infra','notrun','nonzero') else 0)
     def test_semantic_requires_report_and_native_mismatch(self):
         self.writer('semantic'); self.freeze()
         self.assertEqual(self.run_stage()['classification'], 'SEMANTIC_FAIL')
+
+    def run_integration(self, attempt='integration-a1'):
+        return protocol.run(self.manifest, self.digest, self.root, 'integration-red', attempt)
+
+    def test_integration_exit_one_requires_semantic_report(self):
+        for mode, expected in (('semantic', 'SEMANTIC_FAIL'), ('exit-one-pass', 'INFRA_FAILURE'),
+                               ('bad-semantic', 'INFRA_FAILURE'), ('wrong-invariants', 'INFRA_FAILURE')):
+            with self.subTest(mode=mode):
+                self.integration_writer(mode)
+                self.freeze()
+                self.assertEqual(self.run_integration(mode)['classification'], expected)
+                self.manifest.unlink()
+
+    def test_integration_stage_disables_python_bytecode_writes(self):
+        self.integration_writer('pass')
+        self.freeze()
+
+        result = self.run_integration('bytecode-disabled')
+
+        self.assertEqual(result['classification'], 'PASS')
+        self.assertFalse((self.root / 'integration' / '__pycache__').exists())
+
+    def test_invalid_history_classification_is_preserved(self):
+        self.integration_writer('invalid-history')
+        self.freeze()
+
+        result = self.run_integration('invalid-history')
+
+        self.assertEqual(result['classification'], 'INVALID_HISTORY')
+
+    def test_missing_platform_not_pass(self):
+        self.integration_writer('missing-platform')
+        self.freeze()
+
+        result = self.run_integration('missing-platform')
+
+        self.assertNotEqual(result['classification'], 'PASS')
+        self.assertEqual(result['classification'], 'INCONCLUSIVE')
+
+    def test_missing_scenario_or_artifact_membership_is_inconclusive(self):
+        for mode in ('missing-scenario','missing-artifact'):
+            with self.subTest(mode=mode):
+                self.integration_writer(mode)
+                self.freeze()
+                self.assertEqual(self.run_integration(mode)['classification'], 'INCONCLUSIVE')
+                self.manifest.unlink()
+
+    def test_integration_red_requires_scenario_specific_witnesses(self):
+        self.integration_writer('wrong-invariants')
+        self.freeze()
+
+        result = self.run_integration('wrong-invariants')
+
+        self.assertEqual(result['classification'], 'INFRA_FAILURE')
+
+    def test_stale_artifact_rejected(self):
+        self.integration_writer('stale')
+        self.freeze()
+
+        result = self.run_integration('stale')
+
+        self.assertEqual(result['classification'], 'INFRA_FAILURE')
+        self.assertIn('stale', result['detail'])
+
+    def test_changed_evaluator_invalidates_binding(self):
+        self.freeze()
+        (self.root / 'integration/reproduce.py').write_text('changed evaluator source\n')
+
+        result = self.run_integration('changed-evaluator')
+
+        self.assertEqual(result['classification'], 'INFRA_FAILURE')
+        self.assertIn('protected/out-of-scope', result['detail'])
+
+    def test_changed_scenario_inventory_rejected(self):
+        self.freeze()
+        (self.root / 'integration/scenarios.json').write_text('{"version":1,"scenarios":[{"id":"changed"}]}\n')
+
+        result = self.run_integration('changed-inventory')
+
+        self.assertEqual(result['classification'], 'INFRA_FAILURE')
+        self.assertIn('protected/out-of-scope', result['detail'])
+
+    def test_full_gate_legacy_verdict_unchanged(self):
+        self.freeze()
+
+        result = self.run_stage('legacy-full-pass', 'full')
+
+        self.assertEqual(result['classification'], 'PASS')
+        self.assertEqual((Path(result['outputDirectory']) / 'full/report.md').read_text().splitlines()[0], 'Overall: PASS')
 
     def test_timeout_signal_nonzero_missing_stale_malformed_and_native_infra_never_pass(self):
         for i, mode in enumerate(('timeout','signal','nonzero','missing','stale','malformed','infra','notrun')):
@@ -158,6 +326,16 @@ raise SystemExit(1 if mode in ('semantic','infra','notrun','nonzero') else 0)
         self.freeze()
         self.assertEqual(self.run_stage('time')['classification'], 'INFRA_FAILURE')
         self.assertEqual(self.run_stage('after-time')['classification'], 'NOT_RUN')
+
+    def test_legacy_protocol_stages_do_not_require_standalone_per_stage_budget(self):
+        self.assertNotIn('maxAttemptsPerStage', self.config['provenance'])
+        self.freeze()
+
+        first = self.run_stage('legacy-first')
+        second = self.run_stage('legacy-second')
+
+        self.assertEqual(first['classification'], 'PASS')
+        self.assertEqual(second['classification'], 'PASS')
 
     def test_manifest_result_and_artifact_digest_mismatch(self):
         self.freeze()

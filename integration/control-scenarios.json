@@ -1,0 +1,636 @@
+{
+  "version": 1,
+  "controls": [
+    {
+      "id": "CTRL-N1-LOGOUT",
+      "mutant": "stale-success-commit",
+      "commands": [
+        "Bootstrap",
+        "Login(A)",
+        "Expire",
+        "Logout",
+        "Deliver(slot-A1,success)"
+      ],
+      "required": [
+        "logoutReceipt",
+        "storeProbe",
+        "renderedView"
+      ],
+      "witnessInvariants": [
+        "I2",
+        "I3"
+      ],
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "completionProcessedObserved"
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "releaseAfterCommand": "Logout",
+      "releaseAfterProbes": [
+        "CTRL-N1-LOGOUT-after-logout-store"
+      ],
+      "receiptProbeOrder": [
+        [
+          "Logout",
+          "CTRL-N1-LOGOUT-after-logout-store"
+        ]
+      ],
+      "receiptExpectations": [
+        {
+          "command": "Logout",
+          "status": "Completed",
+          "invariant": "I5"
+        }
+      ],
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout",
+            "Deliver(slot-A1,success)"
+          ]
+        }
+      ],
+      "requiredProbes": [
+        "CTRL-N1-LOGOUT-after-logout-store",
+        "CTRL-N1-LOGOUT-final-probe"
+      ],
+      "probeExpectations": {
+        "CTRL-N1-LOGOUT-after-logout-store": {
+          "kind": "Absent"
+        },
+        "CTRL-N1-LOGOUT-final-probe": {
+          "kind": "Absent"
+        }
+      },
+      "requiredRenderedViews": [
+        "CTRL-N1-LOGOUT-after-logout-view",
+        "CTRL-N1-LOGOUT-final-view"
+      ],
+      "renderExpectations": {
+        "CTRL-N1-LOGOUT-after-logout-view": {
+          "phase": "SignedOut",
+          "account": null
+        },
+        "CTRL-N1-LOGOUT-final-view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Absent"
+        },
+        "view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "probeExpectationInvariants": {
+        "CTRL-N1-LOGOUT-after-logout-store": "I5",
+        "CTRL-N1-LOGOUT-final-probe": "I2"
+      },
+      "renderExpectationInvariants": {
+        "CTRL-N1-LOGOUT-after-logout-view": "I3",
+        "CTRL-N1-LOGOUT-final-view": "I3"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "CTRL-N1-NEW-LOGIN",
+      "mutant": "stale-success-commit",
+      "commands": [
+        "Bootstrap",
+        "Login(A)",
+        "Expire",
+        "Logout",
+        "Login(B)",
+        "Deliver(slot-A1,success)"
+      ],
+      "required": [
+        "logoutReceipt",
+        "loginBReceipt",
+        "storeProbe",
+        "renderedView"
+      ],
+      "witnessInvariants": [
+        "I2",
+        "I4"
+      ],
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "completionProcessedObserved"
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "releaseAfterCommand": "Login(B)",
+      "releaseAfterProbes": [
+        "CTRL-N1-NEW-LOGIN-after-logout-store",
+        "CTRL-N1-NEW-LOGIN-after-login-b-store"
+      ],
+      "receiptProbeOrder": [
+        [
+          "Logout",
+          "CTRL-N1-NEW-LOGIN-after-logout-store"
+        ],
+        [
+          "Login(B)",
+          "CTRL-N1-NEW-LOGIN-after-login-b-store"
+        ]
+      ],
+      "receiptExpectations": [
+        {
+          "command": "Logout",
+          "status": "Completed",
+          "invariant": "I5"
+        },
+        {
+          "command": "Login(B)",
+          "status": "Completed",
+          "invariant": "I2"
+        }
+      ],
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout",
+            "Login(B)",
+            "Deliver(slot-A1,success)"
+          ]
+        }
+      ],
+      "requiredProbes": [
+        "CTRL-N1-NEW-LOGIN-after-logout-store",
+        "CTRL-N1-NEW-LOGIN-after-login-b-store",
+        "CTRL-N1-NEW-LOGIN-final-probe"
+      ],
+      "probeExpectations": {
+        "CTRL-N1-NEW-LOGIN-after-logout-store": {
+          "kind": "Absent"
+        },
+        "CTRL-N1-NEW-LOGIN-after-login-b-store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "CTRL-N1-NEW-LOGIN-final-probe": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        }
+      },
+      "requiredRenderedViews": [
+        "CTRL-N1-NEW-LOGIN-after-logout-view",
+        "CTRL-N1-NEW-LOGIN-after-login-b-view",
+        "CTRL-N1-NEW-LOGIN-final-view"
+      ],
+      "renderExpectations": {
+        "CTRL-N1-NEW-LOGIN-after-logout-view": {
+          "phase": "SignedOut",
+          "account": null
+        },
+        "CTRL-N1-NEW-LOGIN-after-login-b-view": {
+          "phase": "SignedIn",
+          "account": "B"
+        },
+        "CTRL-N1-NEW-LOGIN-final-view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "probeExpectationInvariants": {
+        "CTRL-N1-NEW-LOGIN-after-logout-store": "I5",
+        "CTRL-N1-NEW-LOGIN-after-login-b-store": "I2",
+        "CTRL-N1-NEW-LOGIN-final-probe": "I4"
+      },
+      "renderExpectationInvariants": {
+        "CTRL-N1-NEW-LOGIN-after-logout-view": "I3",
+        "CTRL-N1-NEW-LOGIN-after-login-b-view": "I6",
+        "CTRL-N1-NEW-LOGIN-final-view": "I4"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "CTRL-N2-LATE-CLEAR",
+      "mutant": "duplicate-deferred-clear",
+      "commands": [
+        "Bootstrap",
+        "Login(A)",
+        "Expire",
+        "Logout",
+        "Login(B)"
+      ],
+      "effects": [
+        {
+          "effectId": "late-clear-1",
+          "kind": "detachedStoreEffect",
+          "operation": "clear",
+          "originCommandRef": {
+            "command": "Logout",
+            "launchOrdinal": 1
+          }
+        }
+      ],
+      "required": [
+        "logoutReceipt",
+        "probeAbsent",
+        "loginBReceipt",
+        "probeB",
+        "lateEffectCompleted",
+        "finalProbe"
+      ],
+      "witnessInvariants": [
+        "I4"
+      ],
+      "controlActions": [
+        {
+          "action": "arm",
+          "point": "beforeDeferredControlClear",
+          "target": "nextCommand"
+        },
+        {
+          "action": "awaitArrival",
+          "point": "beforeDeferredControlClear"
+        },
+        {
+          "action": "release",
+          "point": "beforeDeferredControlClear"
+        },
+        {
+          "action": "awaitDetachedEffect",
+          "effectId": "late-clear-1"
+        }
+      ],
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "hookArrived",
+        "hookReleased",
+        "detachedEffectAwaited"
+      ],
+      "receiptProbeOrder": [
+        [
+          "Logout",
+          "CTRL-N2-LATE-CLEAR-probe-absent"
+        ],
+        [
+          "Login(B)",
+          "CTRL-N2-LATE-CLEAR-probe-b"
+        ]
+      ],
+      "receiptExpectations": [
+        {
+          "command": "Logout",
+          "status": "Completed",
+          "invariant": "I5"
+        },
+        {
+          "command": "Login(B)",
+          "status": "Completed",
+          "invariant": "I2"
+        }
+      ],
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout",
+            "Login(B)"
+          ]
+        }
+      ],
+      "requiredProbes": [
+        "CTRL-N2-LATE-CLEAR-probe-absent",
+        "CTRL-N2-LATE-CLEAR-probe-b",
+        "CTRL-N2-LATE-CLEAR-final-probe"
+      ],
+      "probeExpectations": {
+        "CTRL-N2-LATE-CLEAR-probe-absent": {
+          "kind": "Absent"
+        },
+        "CTRL-N2-LATE-CLEAR-probe-b": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "CTRL-N2-LATE-CLEAR-final-probe": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        }
+      },
+      "requiredRenderedViews": [
+        "CTRL-N2-LATE-CLEAR-final-view"
+      ],
+      "renderExpectations": {
+        "CTRL-N2-LATE-CLEAR-final-view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "hookReleaseAfterCommand": "Login(B)",
+      "hookReleasePoint": "beforeDeferredControlClear",
+      "hookReleaseAfterProbes": [
+        "CTRL-N2-LATE-CLEAR-probe-absent",
+        "CTRL-N2-LATE-CLEAR-probe-b"
+      ],
+      "probeExpectationInvariants": {
+        "CTRL-N2-LATE-CLEAR-probe-absent": "I5",
+        "CTRL-N2-LATE-CLEAR-probe-b": "I2",
+        "CTRL-N2-LATE-CLEAR-final-probe": "I4"
+      },
+      "renderExpectationInvariants": {
+        "CTRL-N2-LATE-CLEAR-final-view": "I4"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "CTRL-N3-EARLY-PUBLISH",
+      "mutant": "publish-before-store-verification",
+      "commands": [
+        "Bootstrap",
+        "Login(A0)",
+        "Expire",
+        "Deliver(current,success)"
+      ],
+      "required": [
+        "renderedA1",
+        "storeProbeA0",
+        "failedReceipt",
+        "finalProbe"
+      ],
+      "witnessInvariants": [
+        "I6"
+      ],
+      "controlActions": [
+        {
+          "action": "injectStoreFault",
+          "fault": "replaceBefore",
+          "command": "Deliver(current,success)"
+        },
+        {
+          "action": "arm",
+          "point": "afterPublishAck",
+          "target": "nextDelivery"
+        },
+        {
+          "action": "awaitArrival",
+          "point": "afterPublishAck"
+        },
+        {
+          "action": "release",
+          "point": "afterPublishAck"
+        }
+      ],
+      "requiredProbes": [
+        "CTRL-N3-store-probe-a0",
+        "CTRL-N3-final-probe"
+      ],
+      "probeExpectations": {
+        "CTRL-N3-store-probe-a0": {
+          "kind": "Present",
+          "account": "A",
+          "version": 0
+        },
+        "CTRL-N3-final-probe": {
+          "kind": "Present",
+          "account": "A",
+          "version": 0
+        }
+      },
+      "requiredRenderedViews": [
+        "CTRL-N3-rendered-a1",
+        "CTRL-N3-final-view"
+      ],
+      "renderExpectations": {
+        "CTRL-N3-rendered-a1": {
+          "phase": "Refreshing",
+          "account": "A"
+        },
+        "CTRL-N3-final-view": {
+          "phase": "FaultLocked",
+          "account": null
+        }
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "A",
+          "version": 0
+        },
+        "view": {
+          "phase": "FaultLocked",
+          "account": null
+        }
+      },
+      "receiptExpectations": [
+        {
+          "command": "Deliver(current,success)",
+          "status": "FaultLocked",
+          "invariant": "I8"
+        }
+      ],
+      "requiredControllerEvents": [
+        "requestHeld",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "hookArrived",
+        "hookReleased",
+        "receiptObserved",
+        "probeCaptured",
+        "completionProcessedObserved"
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "receiptStoreExpectation": {
+        "command": "Deliver(current,success)",
+        "store": {
+          "kind": "Present",
+          "account": "A",
+          "version": 0
+        }
+      },
+      "renderExpectationInvariants": {
+        "CTRL-N3-rendered-a1": "I6",
+        "CTRL-N3-final-view": "I8"
+      },
+      "probeExpectationInvariants": {
+        "CTRL-N3-store-probe-a0": "I6",
+        "CTRL-N3-final-probe": "I8"
+      },
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A0)",
+            "Expire",
+            "Deliver(current,success)"
+          ]
+        }
+      ],
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "CTRL-N4-FALSE-LOGOUT",
+      "mutant": "report-logout-completed-after-clear-failure",
+      "commands": [
+        "Bootstrap",
+        "Login(A)",
+        "Logout"
+      ],
+      "required": [
+        "logoutReceipt",
+        "independentProbe"
+      ],
+      "forbiddenCommands": [
+        "RetryCleanup"
+      ],
+      "witnessInvariants": [
+        "I5",
+        "I8"
+      ],
+      "controlActions": [
+        {
+          "action": "injectStoreFault",
+          "fault": "clearAfterBeforeVerify",
+          "command": "Logout"
+        }
+      ],
+      "requiredProbes": [
+        "CTRL-N4-FALSE-LOGOUT-independent-probe"
+      ],
+      "probeExpectations": {
+        "CTRL-N4-FALSE-LOGOUT-independent-probe": {
+          "kind": "Absent"
+        }
+      },
+      "requiredRenderedViews": [],
+      "renderExpectations": {},
+      "expectedFinal": {
+        "store": {
+          "kind": "Absent"
+        },
+        "view": {
+          "phase": "FaultLocked",
+          "account": null
+        }
+      },
+      "receiptExpectations": [
+        {
+          "command": "Logout",
+          "status": "FaultLocked",
+          "invariant": "I8"
+        }
+      ],
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured"
+      ],
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Logout"
+          ]
+        }
+      ],
+      "receiptStoreExpectation": {
+        "command": "Logout",
+        "store": {
+          "kind": "Unknown",
+          "errorCode": "readFailed"
+        }
+      },
+      "probeExpectationInvariants": {
+        "CTRL-N4-FALSE-LOGOUT-independent-probe": "I8"
+      },
+      "cancelMode": "disabled"
+    }
+  ]
+}
