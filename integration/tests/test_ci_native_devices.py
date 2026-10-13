@@ -32,9 +32,11 @@ class FakeNativeTools:
         self.pid_alive = True
         self.occupied_serial = False
         self.spawned = []
+        self.timeouts = []
 
     def run(self, argv, **kwargs):
         self.argv.append(list(argv))
+        self.timeouts.append((list(argv), kwargs.get("timeout")))
         stdout = ""
         if argv[:2] == ["xcodebuild", "-version"]:
             stdout = "Xcode 16.2\nBuild version 16C5032a\n"
@@ -301,6 +303,26 @@ class CiNativeDeviceCliTests(unittest.TestCase):
             self.assertEqual(evidence["runtimeVersion"], "18.2")
             self.assertEqual((output / "ios-device.json").is_file(), True)
             self.assertIn(f"IOS_SIMULATOR_UDID={FakeNativeTools.udid}", env_file.read_text())
+
+    def test_ios_device_inventory_tolerates_a_slow_coresimulator_after_boot(self):
+        # On hosted macOS runners `simctl list devices` exceeded 30 s right after bootstatus.
+        tools = FakeNativeTools()
+        with tempfile.TemporaryDirectory(prefix="ci-ios-inventory-") as directory:
+            output = Path(directory) / "ios"
+            manager = CiDeviceBootstrap(
+                output=output,
+                run_id="workflow-123-1",
+                platform="ios",
+                host_platform="darwin",
+                environment={},
+                runner=tools.run,
+            )
+            manager.prepare()
+            manager.cleanup()
+
+        inventory = [timeout for argv, timeout in tools.timeouts if argv[:4] == ["xcrun", "simctl", "list", "devices"]]
+        self.assertEqual(len(inventory), 2)
+        self.assertTrue(all(timeout >= 180 for timeout in inventory), inventory)
 
     def test_android_prepare_verifies_own_avd_serial_api_and_abi(self):
         tools = FakeNativeTools()

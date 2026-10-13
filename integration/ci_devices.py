@@ -21,6 +21,8 @@ class DeviceBootstrapError(RuntimeError):
 
 
 _RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,47}\Z")
+# Hosted macOS runners answer `simctl list devices` slowly right after a boot (>30 s observed).
+_SIMCTL_INVENTORY_TIMEOUT_SECONDS = 180
 _UUID = re.compile(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\Z")
 _AVD_NAME = re.compile(r"native_contract_[A-Za-z0-9_]{1,48}\Z")
 
@@ -271,7 +273,7 @@ class CiDeviceBootstrap:
         self._save_ownership()
         self._run(["xcrun", "simctl", "boot", udid])
         self._run(["xcrun", "simctl", "bootstatus", udid, "-b"], timeout_seconds=self._remaining())
-        devices_doc = json.loads(self._run(["xcrun", "simctl", "list", "devices", "--json"])["stdout"])
+        devices_doc = json.loads(self._run(["xcrun", "simctl", "list", "devices", "--json"], timeout_seconds=_SIMCTL_INVENTORY_TIMEOUT_SECONDS)["stdout"])
         rows = [row for row in _device_rows(devices_doc) if row.get("udid", "").casefold() == udid.casefold()]
         if len(rows) != 1:
             raise DeviceBootstrapError("created simulator is absent or ambiguous in simctl inventory")
@@ -464,7 +466,7 @@ class CiDeviceBootstrap:
                 for row in commands
             ):
                 raise DeviceBootstrapError("simulator creation evidence does not match its ownership record")
-        inventory = json.loads(self._run(["xcrun", "simctl", "list", "devices", "--json"]) ["stdout"])
+        inventory = json.loads(self._run(["xcrun", "simctl", "list", "devices", "--json"], timeout_seconds=_SIMCTL_INVENTORY_TIMEOUT_SECONDS)["stdout"])
         matching = [row for row in _device_rows(inventory) if row.get("udid", "").casefold() == udid.casefold()]
         if not matching:
             return
