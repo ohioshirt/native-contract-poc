@@ -25,11 +25,13 @@ class ProtocolError(ValueError):
 
 PROTECTED = ['contract/', 'verification/', 'formal/', 'scripts/']
 NAME = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$')
+IOS_SHARD_STAGES = tuple(f'candidate-ios-shard-{i}' for i in range(1, 5))
 INTEGRATION_PLATFORMS = {
     'integration-red': ['evaluator'],
     'candidate-ios': ['ios'],
     'candidate-android': ['android'],
     'integration-controls': ['ios', 'android'],
+    **{name: ['ios'] for name in IOS_SHARD_STAGES},
 }
 INTEGRATION_TRACE_VARIANTS = {
     'APP-01': [None], 'APP-02': [None], 'APP-03': [None], 'APP-04': [None], 'APP-05': [None],
@@ -188,7 +190,7 @@ def validate_config(config):
         protocol=stage.get('verdictProtocol')
         integration_stage=protocol=='integration-comparator'
         expected_stage_keys=base_stage_keys|({'expectedPlatforms','requiredScenarioIds'} if integration_stage else set())
-        if integration_stage and name in {'candidate-ios','candidate-android','integration-controls'}:
+        if integration_stage and name in {'candidate-ios','candidate-android','integration-controls', *IOS_SHARD_STAGES}:
             expected_stage_keys |= {'expectedTraceBindings'}
         if integration_stage and name == 'integration-controls':
             expected_stage_keys |= {'expectedControlWitnesses', 'modelReportPath', 'requiredModelWitnesses', 'requiredMutantWitnesses'}
@@ -245,11 +247,15 @@ def validate_config(config):
                     raise ProtocolError('integration-controls model witness inventory is fixed')
                 if stage['requiredMutantWitnesses'] != MODEL_MUTANT_WITNESSES:
                     raise ProtocolError('integration-controls mutant witness inventory is fixed')
-            if name in {'candidate-ios','candidate-android','integration-controls'}:
+            if name in {'candidate-ios','candidate-android','integration-controls', *IOS_SHARD_STAGES}:
                 trace_contract = (INTEGRATION_CONTROL_TRACE_VARIANTS if name=='integration-controls'
                                   else INTEGRATION_TRACE_VARIANTS)
-                if required_ids != list(trace_contract):
+                expected_ids = ([value for value in trace_contract if value in required_ids]
+                                if name in IOS_SHARD_STAGES else list(trace_contract))
+                if required_ids != expected_ids:
                     raise ProtocolError('native stage scenario inventory differs from the frozen variant inventory')
+                if name in IOS_SHARD_STAGES and stage['timeoutSeconds'] != 1800:
+                    raise ProtocolError('iOS shard timeout must be 1800 seconds')
                 expected_bindings = [
                     {'platform':platform,'scenarioId':scenario_id,'variantId':variant_id}
                     for platform in stage['expectedPlatforms']
@@ -298,6 +304,19 @@ def validate_config(config):
         ):
             raise ProtocolError('integration-controls requires each named mutant counterexample report')
         if {'path':primary,'validator':validator} not in artifacts: raise ProtocolError('known primary report required')
+
+    declared_shards = set(config['stages']) & set(IOS_SHARD_STAGES)
+    if declared_shards:
+        if declared_shards != set(IOS_SHARD_STAGES) or 'candidate-ios' not in config['stages']:
+            raise ProtocolError('iOS shard declaration requires all four shards and candidate-ios')
+        covered = set()
+        for name in IOS_SHARD_STAGES:
+            shard_ids = set(config['stages'][name]['requiredScenarioIds'])
+            if covered & shard_ids:
+                raise ProtocolError('iOS shard scenario membership overlaps')
+            covered.update(shard_ids)
+        if covered != set(INTEGRATION_TRACE_VARIANTS):
+            raise ProtocolError('iOS shard partition omits a required scenario')
 
 
 def contained(root, rel):

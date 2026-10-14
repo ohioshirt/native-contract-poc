@@ -180,7 +180,7 @@ def run_stages(
         raise protocol.ProtocolError("stage report path already exists")
     if (
         not isinstance(stages, list) or not stages
-        or any(not isinstance(stage, str) or stage not in SUITE_STAGES for stage in stages)
+        or any(not isinstance(stage, str) or stage not in (*SUITE_STAGES, *protocol_config.IOS_SHARD_STAGES) for stage in stages)
         or len(stages) != len(set(stages))
     ):
         raise protocol.ProtocolError("stage list must contain unique frozen suite stage IDs")
@@ -341,6 +341,7 @@ def _platform_stage_inputs(candidate: Path, platform: str, stage_id: str, output
         required_scenario_ids=stage["requiredScenarioIds"],
         owned_device_evidence=evidence,
         timeout_seconds=stage["timeoutSeconds"],
+        scenario_subset=stage_id in protocol_config.IOS_SHARD_STAGES,
     )
     return result
 
@@ -554,7 +555,7 @@ def stage(*, candidate: Path, stage_id: str, output: Path) -> dict:
     if stage_id == "integration-controls":
         return _run_controls_stage(candidate, output, frozen_stage)
     if stage_id != "integration-red":
-        if stage_id in {"candidate-ios", "candidate-android"}:
+        if stage_id in {"candidate-ios", "candidate-android", *protocol_config.IOS_SHARD_STAGES}:
             return _run_candidate_stage(candidate, output, stage_id, frozen_stage)
         _write_not_run_stage(output, stage_id, frozen_stage)
         report = protocol.integration_report(output / "report.json", frozen_stage)

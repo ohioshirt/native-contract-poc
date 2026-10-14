@@ -18,6 +18,7 @@ from verification import change_protocol as protocol
 
 
 IOS_STAGES = ["integration-red", "candidate-ios", "integration-controls", "legacy-full"]
+IOS_AUXILIARY_STAGES = ['integration-red', 'integration-controls', 'legacy-full']
 ANDROID_STAGES = ["candidate-android", "integration-controls"]
 CONTROL_STAGE = "integration-controls"
 
@@ -181,6 +182,10 @@ def _recheck_platform_histories(platform_root, platform, stage, candidate):
     control_rows = json.loads((candidate / "integration" / "control-scenarios.json").read_text())["controls"]
     controls_stage = "expectedControlWitnesses" in stage
     inventory = control_rows if controls_stage else scenario_rows
+    required_ids = stage['requiredScenarioIds']
+    if [row['id'] for row in inventory if row['id'] in required_ids] != required_ids:
+        raise AggregateError('native stage subset differs from the frozen inventory')
+    inventory = [row for row in inventory if row['id'] in required_ids]
     inventory_by_id = {row["id"]: row for row in inventory}
     mutation_builds = {}
     control_mutation_ids = {}
@@ -493,39 +498,95 @@ def _verify_native_stage(attempt_root, stage, platform, *, candidate, partial_co
     return report, selected, checked
 
 
-def aggregate_ledgers(*, candidate, manifest_path, manifest_digest, ios_ledger, android_ledger, output=None):
+def load_ios_ledgers(root, shard_roots, candidate, manifest, manifest_digest, candidate_digest):
+    """Require either one full ledger or one auxiliary plus all four distinct shards."""
+    shard_mode = shard_roots is not None
+    if shard_mode:
+        if (not isinstance(shard_roots, (list, tuple)) or len(shard_roots) != len(protocol_config.IOS_SHARD_STAGES)
+                or len({Path(path).resolve() for path in [root, *shard_roots]}) != 5):
+            raise AggregateError('iOS shard mode requires four distinct shard ledgers and an auxiliary ledger')
+    checked, records, durations = _suite_ledger(
+        root, candidate, manifest, manifest_digest, 'ios',
+        IOS_AUXILIARY_STAGES if shard_mode else IOS_STAGES, candidate_digest,
+    )
+    if shard_mode:
+        for name, shard_root in zip(protocol_config.IOS_SHARD_STAGES, shard_roots, strict=True):
+            shard_checked, shard_records, shard_durations = _suite_ledger(
+                shard_root, candidate, manifest, manifest_digest, 'ios', [name], candidate_digest)
+            checked.update(shard_checked)
+            records.extend(shard_records)
+            durations.extend(shard_durations)
+    return checked, records, durations
+
+
+def derive_ios_candidate(checked, manifest, candidate):
+    """Derive the logical candidate only from complete individually checked shards."""
+    names = protocol_config.IOS_SHARD_STAGES
+    if not set(names) <= set(checked):
+        raise AggregateError('derived iOS candidate is missing a shard')
+    rows = []
+    covered = set()
+    for name in names:
+        stage = manifest['stages'][name]
+        ids = set(stage['requiredScenarioIds'])
+        if covered & ids:
+            raise AggregateError('derived iOS shard membership overlaps')
+        covered.update(ids)
+        result, root, _ = checked[name]
+        row = {'stageId': name, 'classification': result['classification'],
+               'requiredScenarioIds': stage['requiredScenarioIds'], 'buildHash': None, 'deviceHash': None}
+        if result['classification'] == 'PASS':
+            _, selected, histories = _verify_native_stage(root, stage, 'ios', candidate=candidate)
+            row.update(buildHash=selected['buildHash'], deviceHash=selected['deviceHash'], checkedHistories=histories)
+        rows.append(row)
+    if covered != set(manifest['stages']['candidate-ios']['requiredScenarioIds']):
+        raise AggregateError('derived iOS shard membership omits a required scenario')
+    priority = ('INFRA_FAILURE', 'INVALID_HISTORY', 'NOT_RUN', 'INCONCLUSIVE', 'SEMANTIC_FAIL', 'PASS')
+    classification = next(status for status in priority if any(row['classification'] == status for row in rows))
+    return {'classification': classification, 'shardResults': rows}
+
+
+def verify_attempt_budgets(records, durations, manifest):
+    """Count physical attempts across imported ledgers, including both control runs."""
+    if len(records) > manifest['maxAttempts'] or sum(durations) > manifest['maxTotalSeconds']:
+        raise AggregateError('cross-platform attempt or elapsed-time budget is exhausted')
+    per_stage_limit = manifest['provenance'].get('maxAttemptsPerStage')
+    if type(per_stage_limit) is not int or per_stage_limit != 2:
+        raise AggregateError('frozen per-stage attempt limit is invalid')
+    counts = {}
+    for row in records:
+        counts[row['stageId']] = counts.get(row['stageId'], 0) + 1
+    if any(count > per_stage_limit for count in counts.values()):
+        raise AggregateError('cross-platform per-stage attempt budget is exhausted')
+    return counts
+
+
+def aggregate_ledgers(*, candidate, manifest_path, manifest_digest, ios_ledger, android_ledger, output=None,
+                      ios_shard_ledgers=None):
     """Recheck both platform ledgers and derive the complete five-stage verdict."""
     candidate = Path(candidate).resolve()
     manifest = protocol.read_manifest(manifest_path, manifest_digest)
     candidate_digest = _source_digest(manifest, candidate)
     if manifest["baselineCommit"] != manifest["provenance"].get("baselineCommit"):
         raise AggregateError("manifest baseline provenance is inconsistent")
-    ios_checked, ios_results, ios_durations = _suite_ledger(
-        ios_ledger, candidate, manifest, manifest_digest, "ios", IOS_STAGES, candidate_digest
+    ios_checked, ios_results, ios_durations = load_ios_ledgers(
+        ios_ledger, ios_shard_ledgers, candidate, manifest, manifest_digest, candidate_digest
     )
     android_checked, android_results, android_durations = _suite_ledger(
         android_ledger, candidate, manifest, manifest_digest, "android", ANDROID_STAGES, candidate_digest
     )
     all_records = ios_results + android_results
-    if len(all_records) > manifest["maxAttempts"] or sum(ios_durations + android_durations) > manifest["maxTotalSeconds"]:
-        raise AggregateError("cross-platform attempt or elapsed-time budget is exhausted")
+    counts_by_stage = verify_attempt_budgets(all_records, ios_durations + android_durations, manifest)
     per_stage_limit = manifest["provenance"].get("maxAttemptsPerStage")
-    if type(per_stage_limit) is not int or per_stage_limit != 2:
-        raise AggregateError("frozen per-stage attempt limit is invalid")
-    counts_by_stage = {}
-    for row in all_records:
-        counts_by_stage[row["stageId"]] = counts_by_stage.get(row["stageId"], 0) + 1
-    if any(count > per_stage_limit for count in counts_by_stage.values()):
-        raise AggregateError("cross-platform per-stage attempt limit is exhausted")
-
     ios_red = ios_checked["integration-red"][0]
-    ios_candidate = ios_checked["candidate-ios"][0]
+    derived_ios = derive_ios_candidate(ios_checked, manifest, candidate) if ios_shard_ledgers is not None else None
+    ios_candidate = derived_ios if derived_ios is not None else ios_checked["candidate-ios"][0]
     ios_controls = ios_checked[CONTROL_STAGE][0]
     ios_legacy = ios_checked["legacy-full"][0]
     android_candidate = android_checked["candidate-android"][0]
     android_controls = android_checked[CONTROL_STAGE][0]
 
-    if ios_candidate["classification"] == "PASS":
+    if derived_ios is None and ios_candidate["classification"] == "PASS":
         _verify_native_stage(ios_checked["candidate-ios"][1], manifest["stages"]["candidate-ios"], "ios", candidate=candidate)
     if android_candidate["classification"] == "PASS":
         _verify_native_stage(android_checked["candidate-android"][1], manifest["stages"]["candidate-android"], "android", candidate=candidate)
@@ -622,7 +683,9 @@ def aggregate_ledgers(*, candidate, manifest_path, manifest_digest, ios_ledger, 
         "manifestDigest": manifest_digest,
         "candidateDigest": candidate_digest,
         "frozenSourceDigest": manifest["frozenSourceDigest"],
-        "selectedPlatforms": {"ios": IOS_STAGES, "android": ANDROID_STAGES},
+        "selectedPlatforms": {
+            "ios": [*IOS_AUXILIARY_STAGES, *protocol_config.IOS_SHARD_STAGES] if derived_ios is not None else IOS_STAGES,
+            "android": ANDROID_STAGES},
         "stageResults": suite["stageResults"],
         "derivedIntegrationControls": derived_controls,
         "platformLedgers": {
@@ -638,6 +701,8 @@ def aggregate_ledgers(*, candidate, manifest_path, manifest_digest, ios_ledger, 
             "maxTotalSeconds": manifest["maxTotalSeconds"],
         },
     }
+    if derived_ios is not None:
+        result['derivedCandidateIos'] = derived_ios
     if output is not None:
         protocol.write_json(Path(output), result)
     return result
@@ -649,6 +714,7 @@ def main(argv=None):
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--manifest-digest", required=True)
     parser.add_argument("--ios-ledger", required=True)
+    parser.add_argument('--ios-shard-ledger', action='append', help='Four shard ledger roots, in shard number order')
     parser.add_argument("--android-ledger", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args(argv)
@@ -658,6 +724,7 @@ def main(argv=None):
             manifest_path=Path(args.manifest),
             manifest_digest=args.manifest_digest,
             ios_ledger=Path(args.ios_ledger),
+            ios_shard_ledgers=args.ios_shard_ledger,
             android_ledger=Path(args.android_ledger),
             output=Path(args.output),
         )

@@ -23,7 +23,7 @@ from integration import progress
 from integration.check import _resolve_scenario_variant, check_control_trace, check_trace, control_inventory_errors
 from integration.mutation_installation import mutation_for_control, prepare_mutation_workspace
 from integration.mutations import validate_control_bindings
-from verification.change_protocol import digest_bytes, write_json
+from verification.change_protocol import IOS_SHARD_STAGES, digest_bytes, encode, write_json
 
 
 _ANDROID_LABEL = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
@@ -3700,6 +3700,7 @@ def run_platform(
     owned_device_evidence: Path | None = None,
     timeout_seconds: float = 1200,
     validation_scope: str | None = None,
+    scenario_subset: bool = False,
 ) -> dict:
     """Inspect and run one native platform using only the explicitly named device.
 
@@ -3730,18 +3731,33 @@ def run_platform(
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         return {"classification": "INFRA_FAILURE", "detail": f"scenario inventory unavailable: {exc}"}
 
+    subset_error = None
+    if scenario_subset:
+        if (
+            platform != 'ios' or stage_id not in IOS_SHARD_STAGES or inventory_key != 'scenarios'
+            or not isinstance(required_scenario_ids, list) or not required_scenario_ids
+            or any(not isinstance(value, str) for value in required_scenario_ids)
+            or len(set(required_scenario_ids)) != len(required_scenario_ids)
+            or [row['id'] for row in scenario_rows if row['id'] in required_scenario_ids] != required_scenario_ids
+        ):
+            subset_error = 'invalid iOS shard subset or inventory order'
+        else:
+            scenario_rows = [row for row in scenario_rows if row['id'] in required_scenario_ids]
+            scenario_document[inventory_key] = scenario_rows
+            scenario_bytes = encode(scenario_document)
+
     output.mkdir(parents=True)
     inventory_copy = output / ("control-scenarios.json" if inventory_key == "controls" else "scenarios.json")
     inventory_copy.write_bytes(scenario_bytes)
     ids = [row["id"] for row in scenario_rows]
-    if required_scenario_ids is not None and ids != required_scenario_ids:
+    if subset_error or (required_scenario_ids is not None and ids != required_scenario_ids):
         return _write_platform_artifact_shell(output, platform=platform, stage_id=stage_id or f"candidate-{platform}", scenario_rows=scenario_rows, result={
             "version": 1, "classification": "INVALID_HISTORY", "platform": platform, "deviceId": device,
-            "requiredScenarioIds": list(required_scenario_ids), "scenarioIds": ids,
+            "requiredScenarioIds": list(required_scenario_ids or []), "scenarioIds": ids,
             "scenarioDigest": digest_bytes(scenario_bytes), "deviceHash": None, "buildHash": None,
-            "completedScenarioIds": [], "missingScenarioIds": list(required_scenario_ids),
+            "completedScenarioIds": [], "missingScenarioIds": list(required_scenario_ids or []),
             "violations": ["provided scenario inventory differs from the required frozen IDs"],
-            "missingObservations": [], "commands": [], "detail": "scenario inventory ID mismatch",
+            "missingObservations": [], "commands": [], "detail": subset_error or "scenario inventory ID mismatch",
         })
     required_ids = list(required_scenario_ids) if required_scenario_ids is not None else ids
     if stage_id is None:

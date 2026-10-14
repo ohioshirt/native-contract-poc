@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 from integration.mutations import validate_control_bindings
-from verification.change_protocol import ProtocolError, validate_config
+from verification.change_protocol import IOS_SHARD_STAGES, ProtocolError, validate_config
 
 
 CHANGE_ID = "standalone-native-app-integration"
@@ -137,6 +137,21 @@ def _trace_bindings(platforms, rows):
             for variant_id in variant_ids:
                 bindings.append({"platform": platform, "scenarioId": row["id"], "variantId": variant_id})
     return bindings
+
+
+def ios_shard_scenarios(rows):
+    """Balance complete scenarios by launches/variants with deterministic ties."""
+    shards = [[] for _ in IOS_SHARD_STAGES]
+    loads = [0] * len(shards)
+    weighted = [
+        (max(1, len(row.get('launches', []))) * len(row.get('variants') or [None]), index, row)
+        for index, row in enumerate(rows)
+    ]
+    for weight, index, row in sorted(weighted, key=lambda item: (-item[0], item[1])):
+        shard = min(range(len(shards)), key=lambda value: (loads[value], value))
+        shards[shard].append((index, row))
+        loads[shard] += weight
+    return [[row for _, row in sorted(shard)] for shard in shards]
 
 
 def validate_input_inventories(scenarios, controls):
@@ -300,6 +315,11 @@ def build_config(root: Path, output: Path, baseline: str) -> dict:
         stages[stage_id]["expectedTraceBindings"] = _trace_bindings(
             stages[stage_id]["expectedPlatforms"], scenarios
         )
+    for stage_id, rows in zip(IOS_SHARD_STAGES, ios_shard_scenarios(scenarios), strict=True):
+        artifacts = [_file_artifact(stage_id + '/report.json', 'integration-report'),
+                     *_platform_artifacts(stage_id, 'ios')]
+        stages[stage_id] = _integration_stage(stage_id, 1800, ['ios'], [row['id'] for row in rows], artifacts)
+        stages[stage_id]['expectedTraceBindings'] = _trace_bindings(['ios'], rows)
     stages["integration-controls"]["expectedTraceBindings"] = _trace_bindings(
         stages["integration-controls"]["expectedPlatforms"], controls
     )
@@ -311,6 +331,7 @@ def build_config(root: Path, output: Path, baseline: str) -> dict:
         "protectedPaths": protected,
         "ignoredPaths": [
             ".git/",
+            ".superpowers/",
             ".DS_Store",
             "**/.DS_Store",
             "docs/experiments/control-location.json",

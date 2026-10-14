@@ -221,7 +221,8 @@ class ProtocolConfigurationTests(unittest.TestCase):
         self.assertIsNone(config["metadata"]["costUsd"])
         self.assertEqual(
             set(config["stages"]),
-            {"integration-red", "candidate-ios", "candidate-android", "integration-controls", "legacy-full"},
+            {"integration-red", "candidate-ios", "candidate-android", "integration-controls", "legacy-full",
+             *protocol_config.IOS_SHARD_STAGES},
         )
         self.assertEqual(config["stages"]["integration-red"]["timeoutSeconds"], 600)
         self.assertEqual(config["stages"]["candidate-ios"]["timeoutSeconds"], 1800)
@@ -308,6 +309,7 @@ class ProtocolConfigurationTests(unittest.TestCase):
             self.assertNotIn(".DS_Store", manifest["inputSnapshot"])
 
             sentinel_paths = [
+                ROOT / '.superpowers' / 'sdd' / f'.protocol-generated-{os.getpid()}',
                 ROOT / "verification" / "__pycache__" / f".protocol-generated-{os.getpid()}.pyc",
                 ROOT / "verification" / "formal" / "__pycache__" / f".protocol-generated-{os.getpid()}.pyc",
                 ROOT / "scripts" / "__pycache__" / f".protocol-generated-{os.getpid()}.pyc",

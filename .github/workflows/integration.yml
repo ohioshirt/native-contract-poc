@@ -99,19 +99,34 @@ jobs:
           retention-days: 90
 
   ios-native:
-    name: iOS 18.2 owned native stage ledger
+    name: iOS 18.2 ${{ matrix.ledger }} native stage ledger
     if: >-
       (github.event.action != 'labeled' || github.event.label.name == 'native-ci') &&
       (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'native-ci'))
     needs: evaluator-and-freeze
     runs-on: macos-15
-    # Provisional: no full iOS run has completed yet (an 87.7-minute run stopped at the
-    # 30-minute candidate stage limit). Tighten once a complete run is measured.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ledger: auxiliary
+            stages: integration-red integration-controls legacy-full
+          - ledger: shard-1
+            stages: candidate-ios-shard-1
+          - ledger: shard-2
+            stages: candidate-ios-shard-2
+          - ledger: shard-3
+            stages: candidate-ios-shard-3
+          - ledger: shard-4
+            stages: candidate-ios-shard-4
+    # Each candidate shard retains its frozen 30-minute stage limit. The auxiliary
+    # ledger's controls/full-gate duration remains provisional until a complete run.
     timeout-minutes: 180
     env:
       RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
       NATIVE_CONTRACT_OUTPUT_ROOT: reports/standalone/attempts/ci-${{ github.run_id }}-${{ github.run_attempt }}-manifest
       NATIVE_CONTRACT_CONTROL_PLATFORMS: ios
+      FROZEN_STAGES: ${{ matrix.stages }}
     steps:
       - name: Checkout complete history
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -136,6 +151,7 @@ jobs:
           python-version: 3.12.8
 
       - name: Select pinned Java for the legacy full gate
+        if: matrix.ledger == 'auxiliary'
         uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
@@ -201,6 +217,11 @@ jobs:
           test -s "$manifest"
           test -s "$digest_file"
           manifest_digest="$(cat "$digest_file")"
+          read -r -a stage_ids <<< "$FROZEN_STAGES"
+          stage_args=()
+          for stage_id in "${stage_ids[@]}"; do
+            stage_args+=(--stage "$stage_id")
+          done
           # Stage evidence stays in files; progress lines (stage, build, case and command
           # start/end with elapsed seconds) stream into this log while the stages run.
           export NATIVE_CONTRACT_PROGRESS_LOG="$RUNNER_TEMP/native-contract-ios/progress.log"
@@ -213,8 +234,7 @@ jobs:
             --output "$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT" \
             --manifest "$manifest" \
             --manifest-digest "$manifest_digest" \
-            --stage integration-red --stage candidate-ios \
-            --stage integration-controls --stage legacy-full ${CONTINUE_FLAG:-} \
+            "${stage_args[@]}" ${CONTINUE_FLAG:-} \
             > "$RUNNER_TEMP/native-contract-ios/stages.stdout.log" \
             2> "$RUNNER_TEMP/native-contract-ios/stages.stderr.log"
           stage_status=$?
@@ -222,7 +242,7 @@ jobs:
           kill "$progress_tail" 2>/dev/null
           suite_report="$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT/suite-report.json"
           if [[ -s "$suite_report" ]]; then
-            python -m integration.progress summary "$suite_report" --title "iOS ledger" >> "$GITHUB_STEP_SUMMARY"
+            python -m integration.progress summary "$suite_report" --title "iOS ${FROZEN_STAGES} ledger" >> "$GITHUB_STEP_SUMMARY"
           fi
           set -e
           if [[ "$stage_status" -ne 0 && "$stage_status" -ne 3 ]]; then
@@ -257,7 +277,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: standalone-ios-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          name: standalone-ios-${{ matrix.ledger }}-ledger-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/
             !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/derived-data/**
@@ -471,12 +491,40 @@ jobs:
           name: standalone-manifest-${{ github.run_id }}-${{ github.run_attempt }}
           path: reports/standalone/${{ env.RUN_LABEL }}-manifest
 
-      - name: Download iOS ledger
+      - name: Download iOS auxiliary ledger
         if: always()
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: standalone-ios-ledger-${{ github.run_id }}-${{ github.run_attempt }}
-          path: reports/standalone/imported-${{ env.RUN_LABEL }}-ios
+          name: standalone-ios-auxiliary-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/imported-${{ env.RUN_LABEL }}-ios-auxiliary
+
+      - name: Download iOS shard 1 ledger
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-ios-shard-1-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/imported-${{ env.RUN_LABEL }}-ios-shard-1
+
+      - name: Download iOS shard 2 ledger
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-ios-shard-2-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/imported-${{ env.RUN_LABEL }}-ios-shard-2
+
+      - name: Download iOS shard 3 ledger
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-ios-shard-3-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/imported-${{ env.RUN_LABEL }}-ios-shard-3
+
+      - name: Download iOS shard 4 ledger
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-ios-shard-4-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/imported-${{ env.RUN_LABEL }}-ios-shard-4
 
       - name: Download Android ledger
         if: always()
@@ -500,7 +548,11 @@ jobs:
           python -m integration.aggregate \
             --candidate "$GITHUB_WORKSPACE" \
             --manifest "$manifest" --manifest-digest "$(cat "$digest_file")" \
-            --ios-ledger "reports/standalone/imported-${RUN_LABEL}-ios" \
+            --ios-ledger "reports/standalone/imported-${RUN_LABEL}-ios-auxiliary" \
+            --ios-shard-ledger "reports/standalone/imported-${RUN_LABEL}-ios-shard-1" \
+            --ios-shard-ledger "reports/standalone/imported-${RUN_LABEL}-ios-shard-2" \
+            --ios-shard-ledger "reports/standalone/imported-${RUN_LABEL}-ios-shard-3" \
+            --ios-shard-ledger "reports/standalone/imported-${RUN_LABEL}-ios-shard-4" \
             --android-ledger "reports/standalone/imported-${RUN_LABEL}-android" \
             --output "reports/standalone/${RUN_LABEL}-aggregate.json" \
             > "$RUNNER_TEMP/native-contract-aggregate.stdout.log" \
@@ -513,7 +565,11 @@ jobs:
           name: standalone-native-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             reports/standalone/${{ env.RUN_LABEL }}-aggregate.json
-            reports/standalone/imported-${{ env.RUN_LABEL }}-ios
+            reports/standalone/imported-${{ env.RUN_LABEL }}-ios-auxiliary
+            reports/standalone/imported-${{ env.RUN_LABEL }}-ios-shard-1
+            reports/standalone/imported-${{ env.RUN_LABEL }}-ios-shard-2
+            reports/standalone/imported-${{ env.RUN_LABEL }}-ios-shard-3
+            reports/standalone/imported-${{ env.RUN_LABEL }}-ios-shard-4
             reports/standalone/imported-${{ env.RUN_LABEL }}-android
             ${{ runner.temp }}/native-contract-aggregate.*.log
           if-no-files-found: warn
