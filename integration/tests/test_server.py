@@ -7,10 +7,30 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from urllib.parse import urlencode
 
 from integration.server import start_server
 from integration.server_state import ServerState
+
+
+class ServerStartupTests(unittest.TestCase):
+    def test_startup_never_resolves_the_bind_address(self):
+        refuse = AssertionError("startup must not reverse-resolve the bind address")
+        with tempfile.TemporaryDirectory() as output, patch(
+            "socket.getfqdn", side_effect=refuse
+        ) as getfqdn, patch("socket.gethostbyaddr", side_effect=refuse) as gethostbyaddr:
+            server = start_server("127.0.0.1", 0, Path(output))
+            try:
+                ready = json.loads((Path(output) / "server-ready.json").read_text())
+            finally:
+                server.server_close()
+
+        getfqdn.assert_not_called()
+        gethostbyaddr.assert_not_called()
+        self.assertEqual(ready["bindAddress"], "127.0.0.1")
+        self.assertEqual(ready["port"], server.server_address[1])
+        self.assertEqual((server.server_name, server.server_port), ("127.0.0.1", server.server_address[1]))
 
 
 class ControllableHttpServerTests(unittest.TestCase):

@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import socket
+import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -32,6 +33,15 @@ class _Server(ThreadingHTTPServer):
         self.server_pid = os.getpid()
         self.hold_timeout_seconds = hold_timeout_seconds
         super().__init__(address, handler)
+
+    def server_bind(self):
+        # HTTPServer.server_bind resolves socket.getfqdn(host) only to fill
+        # server_name, which nothing here reads. A slow resolver turns that
+        # reverse lookup of the loopback address into a startup stall.
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
 
 
 def _bind_address_is_explicitly_safe(bind: str) -> bool:
