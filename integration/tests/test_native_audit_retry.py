@@ -19,6 +19,52 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class NativeAuditRetryTests(unittest.TestCase):
+    def _ios_audit_after_container_timeout(self, *, always_hangs=False):
+        process_id = 'attempt-01/APP-02/p1'
+        clock = [0.0]
+        timeouts = []
+        with tempfile.TemporaryDirectory() as temporary:
+            container = Path(temporary)
+            source = container / 'Documents/native-harness/attempt-01/APP-02/p1/native-events.jsonl'
+            source.parent.mkdir(parents=True)
+            source.write_text(json.dumps({'kind': 'slotIssued', 'processInstanceId': process_id, 'localSequence': 1}) + '\n')
+
+            def runner(argv, **kwargs):
+                self.assertEqual(argv, ['xcrun', 'simctl', 'get_app_container', 'OWNED-UUID', 'dev.nativecontract.demo.ios', 'data'])
+                timeouts.append(kwargs['timeout'])
+                if len(timeouts) == 1 or always_hangs:
+                    clock[0] += kwargs['timeout']
+                    raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+                return subprocess.CompletedProcess(argv, 0, stdout=str(container), stderr='')
+
+            bridge = controller.NativeProgressBridge(
+                platform='ios', run=SimpleNamespace(), device='OWNED-UUID', attempt_id='attempt-01',
+                scenario={'id': 'APP-02'}, variant=None, controller_events=[], observations=[],
+                process_artifact_directory=container, command_runner=runner,
+            )
+            with patch.object(controller.time, 'monotonic', side_effect=lambda: clock[0]), \
+                 patch.object(controller.time, 'sleep', side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+                if always_hangs:
+                    with self.assertRaisesRegex(TimeoutError, '15-second audit stable error window'):
+                        bridge._read_native_events_until(process_id, lambda events: events[-1]['kind'], description='slot')
+                    result = None
+                else:
+                    result = bridge._read_native_events_until(process_id, lambda events: events[-1]['kind'], description='slot')
+        return result, timeouts, clock[0]
+
+    def test_ios_container_timeout_leaves_time_for_a_fresh_query_within_audit_window(self):
+        result, timeouts, elapsed = self._ios_audit_after_container_timeout()
+        self.assertEqual(result, 'slotIssued')
+        self.assertEqual(timeouts, [5, 5])
+        self.assertLess(elapsed, 15)
+
+    def test_ios_container_retries_cannot_extend_the_fifteen_second_audit_window(self):
+        _, timeouts, elapsed = self._ios_audit_after_container_timeout(always_hangs=True)
+        self.assertEqual(len(timeouts), 3)
+        self.assertEqual(timeouts[:2], [5, 5])
+        self.assertLess(timeouts[-1], 5)
+        self.assertEqual(elapsed, 15)
+
     def test_release_requested_retries_a_torn_audit_before_selecting_slot(self):
         process_id = "attempt-01/APP-02/p1"
         wire_tag = process_id + ":refresh:4"

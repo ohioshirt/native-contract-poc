@@ -1140,7 +1140,9 @@ class NativeProgressBridge:
                     attempt_id=self.attempt_id,
                     process_instance_id=process_id,
                     command_runner=self.command_runner,
-                    timeout_seconds=min(15, remaining),
+                    # A hung simctl lookup must leave part of the unchanged
+                    # 15-second audit window for a fresh query.
+                    timeout_seconds=min(5 if self.platform == 'ios' else 15, remaining),
                 )
                 selected = select(events)
                 return selected
