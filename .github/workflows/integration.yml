@@ -1,0 +1,520 @@
+name: standalone-native-app-integration
+
+# The native ledgers take 40+ minutes, so pull requests run them only when the
+# `native-ci` label is present; pushes to main and manual dispatch always run them.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      continue_after_failure:
+        description: Run every frozen stage even after an infrastructure failure (diagnosis only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # An unrelated label gets its own group so it cannot cancel a running ledger.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ (github.event.action == 'labeled' && github.event.label.name != 'native-ci') && github.run_id || 'ci' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  evaluator-and-freeze:
+    name: Protected evaluator and frozen source manifest
+    if: github.event.action != 'labeled' || github.event.label.name == 'native-ci'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: 3.12.8
+
+      - name: Run formal verification tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-contract-evaluator"
+          python --version
+          PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s verification -p 'test_*.py' -v \
+            > "$RUNNER_TEMP/native-contract-evaluator/verification.stdout.log" \
+            2> "$RUNNER_TEMP/native-contract-evaluator/verification.stderr.log"
+
+      - name: Run integration evaluator and protocol tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-contract-evaluator"
+          PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s integration/tests -p 'test_*.py' -v \
+            > "$RUNNER_TEMP/native-contract-evaluator/integration.stdout.log" \
+            2> "$RUNNER_TEMP/native-contract-evaluator/integration.stderr.log"
+
+      - name: Test exact iOS runtime gate behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python -m unittest discover \
+            -s apps/ios-demo/scripts -p 'test_*.py' -v \
+            > "$RUNNER_TEMP/native-contract-evaluator/runtime-gate.stdout.log" \
+            2> "$RUNNER_TEMP/native-contract-evaluator/runtime-gate.stderr.log"
+
+      - name: Freeze the baseline-bound manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports/standalone
+          python -m integration.reproduce freeze \
+            --candidate "$GITHUB_WORKSPACE" \
+            --output "reports/standalone/${RUN_LABEL}-manifest" \
+            > "$RUNNER_TEMP/native-contract-evaluator/freeze.stdout.log" \
+            2> "$RUNNER_TEMP/native-contract-evaluator/freeze.stderr.log"
+
+      - name: Upload frozen manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: standalone-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/ci-${{ github.run_id }}-${{ github.run_attempt }}-manifest/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload evaluator logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: standalone-evaluator-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-contract-evaluator
+          if-no-files-found: warn
+          retention-days: 90
+
+  ios-native:
+    name: iOS 18.2 owned native stage ledger
+    if: >-
+      (github.event.action != 'labeled' || github.event.label.name == 'native-ci') &&
+      (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'native-ci'))
+    needs: evaluator-and-freeze
+    runs-on: macos-15
+    # Provisional: no full iOS run has completed yet (an 87.7-minute run stopped at the
+    # 30-minute candidate stage limit). Tighten once a complete run is measured.
+    timeout-minutes: 180
+    env:
+      RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
+      NATIVE_CONTRACT_OUTPUT_ROOT: reports/standalone/attempts/ci-${{ github.run_id }}-${{ github.run_attempt }}-manifest
+      NATIVE_CONTRACT_CONTROL_PLATFORMS: ios
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download frozen manifest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/ci-${{ github.run_id }}-${{ github.run_attempt }}-manifest
+
+      - name: Select pinned Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '16.2'
+
+      - name: Select pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: 3.12.8
+
+      - name: Select pinned Java for the legacy full gate
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '17.0.13+11'
+
+      - name: Read frozen output root and prepare logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="reports/standalone/${RUN_LABEL}-manifest/manifest.json"
+          test -s "$manifest"
+          output_root="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["outputRoot"])' "$manifest")"
+          printf 'NATIVE_CONTRACT_OUTPUT_ROOT=%s\n' "$output_root" >> "$GITHUB_ENV"
+          mkdir -p "$GITHUB_WORKSPACE/$output_root" "$RUNNER_TEMP/native-contract-ios"
+          xcodebuild -version | tee "$RUNNER_TEMP/native-contract-ios/xcode-version.log"
+          test "$(xcodebuild -version | sed -n '1s/.* //p')" = "16.2"
+
+      - name: List iOS project and resolve pinned packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -list -project apps/ios-demo/NativeContractDemo.xcodeproj \
+            2>&1 | tee "$RUNNER_TEMP/native-contract-ios/project-list.log"
+          xcodebuild -resolvePackageDependencies -project apps/ios-demo/NativeContractDemo.xcodeproj -scheme NativeContractDemo \
+            2>&1 | tee "$RUNNER_TEMP/native-contract-ios/package-resolution.log"
+
+      # The simulator build below needs the iOS 18.2 platform, which this step
+      # downloads when the hosted Xcode 16.2 image lacks it.
+      - name: Require exact iOS 18.2 runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python apps/ios-demo/scripts/prepare-ci-runtime.py \
+            --output "$RUNNER_TEMP/native-contract-ios/runtime-gate" \
+            --timeout-seconds 600
+
+      - name: Build iOS package shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -project apps/ios-demo/NativeContractDemo.xcodeproj \
+            -scheme NativeContractDemo -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/native-contract-ios/preflight-derived-data" \
+            CODE_SIGNING_ALLOWED=NO build \
+            2>&1 | tee "$RUNNER_TEMP/native-contract-ios/preflight-build.log"
+
+      - name: Create this run's owned iOS simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/ci-native-devices.py prepare --platform ios \
+            --output "$RUNNER_TEMP/native-contract-ios/owned-device" \
+            --run-id "$RUN_LABEL" --github-env "$GITHUB_ENV"
+
+      - name: Run iOS-bound frozen stages
+        shell: bash
+        env:
+          CONTINUE_FLAG: ${{ inputs.continue_after_failure && '--continue-after-failure' || '' }}
+        run: |
+          set -euo pipefail
+          manifest="$GITHUB_WORKSPACE/reports/standalone/${RUN_LABEL}-manifest/manifest.json"
+          digest_file="${manifest%.json}.sha256"
+          test -s "$manifest"
+          test -s "$digest_file"
+          manifest_digest="$(cat "$digest_file")"
+          # Stage evidence stays in files; progress lines (stage, build, case and command
+          # start/end with elapsed seconds) stream into this log while the stages run.
+          export NATIVE_CONTRACT_PROGRESS_LOG="$RUNNER_TEMP/native-contract-ios/progress.log"
+          : > "$NATIVE_CONTRACT_PROGRESS_LOG"
+          tail -n +1 -f "$NATIVE_CONTRACT_PROGRESS_LOG" &
+          progress_tail=$!
+          set +e
+          python -m integration.reproduce run-stages \
+            --candidate "$GITHUB_WORKSPACE" \
+            --output "$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT" \
+            --manifest "$manifest" \
+            --manifest-digest "$manifest_digest" \
+            --stage integration-red --stage candidate-ios \
+            --stage integration-controls --stage legacy-full ${CONTINUE_FLAG:-} \
+            > "$RUNNER_TEMP/native-contract-ios/stages.stdout.log" \
+            2> "$RUNNER_TEMP/native-contract-ios/stages.stderr.log"
+          stage_status=$?
+          sleep 1
+          kill "$progress_tail" 2>/dev/null
+          suite_report="$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT/suite-report.json"
+          if [[ -s "$suite_report" ]]; then
+            python -m integration.progress summary "$suite_report" --title "iOS ledger" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          set -e
+          if [[ "$stage_status" -ne 0 && "$stage_status" -ne 3 ]]; then
+            echo "::error title=iOS ledger::run-stages exited $stage_status; stderr tail follows"
+            tail -n 40 "$RUNNER_TEMP/native-contract-ios/stages.stderr.log" || true
+            exit "$stage_status"
+          fi
+
+      - name: Clean up only this run's simulator
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          device_dir="$RUNNER_TEMP/native-contract-ios/owned-device"
+          output_root="${NATIVE_CONTRACT_OUTPUT_ROOT:-reports/standalone/attempts/${RUN_LABEL}-manifest}"
+          mkdir -p "$GITHUB_WORKSPACE/$output_root/owned-device"
+          if [[ -f "$device_dir/ownership.json" ]]; then
+            python scripts/ci-native-devices.py cleanup --output "$device_dir"
+            cp -R "$device_dir/." "$GITHUB_WORKSPACE/$output_root/owned-device/"
+          else
+            printf '%s\n' '{"classification":"NOT_RUN","detail":"owned simulator creation did not complete"}' \
+              > "$GITHUB_WORKSPACE/$output_root/owned-device/bootstrap-status.json"
+          fi
+          if [[ -d "$RUNNER_TEMP/native-contract-ios/runtime-gate" ]]; then
+            cp -R "$RUNNER_TEMP/native-contract-ios/runtime-gate" "$GITHUB_WORKSPACE/$output_root/runtime-gate"
+          fi
+          if [[ -d "$RUNNER_TEMP/native-contract-ios" ]]; then
+            cp -R "$RUNNER_TEMP/native-contract-ios/." "$GITHUB_WORKSPACE/$output_root/ios-runner-logs/"
+          fi
+
+      - name: Upload iOS portable ledger
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: standalone-ios-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/derived-data/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/preflight-derived-data/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/gradle-home/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/.gradle/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/.swift-cache/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/candidate-copy/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/__pycache__/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/*.pyc
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/.DS_Store
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 90
+
+  android-native:
+    name: Android API 35 x86_64 owned native stage ledger
+    if: >-
+      (github.event.action != 'labeled' || github.event.label.name == 'native-ci') &&
+      (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'native-ci'))
+    needs: evaluator-and-freeze
+    runs-on: ubuntu-24.04
+    # Provisional: a complete Android ledger measured 10.7 minutes.
+    timeout-minutes: 45
+    env:
+      RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
+      NATIVE_CONTRACT_OUTPUT_ROOT: reports/standalone/attempts/ci-${{ github.run_id }}-${{ github.run_attempt }}-manifest
+      NATIVE_CONTRACT_CONTROL_PLATFORMS: android
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download frozen manifest
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/ci-${{ github.run_id }}-${{ github.run_attempt }}-manifest
+
+      - name: Select pinned Java
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '17.0.13+11'
+
+      - name: Select pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: 3.12.8
+
+      - name: Install pinned Android build packages and API 35 image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_SDK_ROOT:-}"
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          "$SDKMANAGER" --install \
+            'platform-tools' 'emulator' 'platforms;android-35' 'build-tools;35.0.0' \
+            'system-images;android-35;google_apis;x86_64'
+          # The controller invokes `adb` by name in later steps.
+          printf '%s\n' "$ANDROID_SDK_ROOT/platform-tools" "$ANDROID_SDK_ROOT/emulator" >> "$GITHUB_PATH"
+
+      - name: Read frozen output root and prepare logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="reports/standalone/${RUN_LABEL}-manifest/manifest.json"
+          test -s "$manifest"
+          output_root="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["outputRoot"])' "$manifest")"
+          printf 'NATIVE_CONTRACT_OUTPUT_ROOT=%s\n' "$output_root" >> "$GITHUB_ENV"
+          mkdir -p "$GITHUB_WORKSPACE/$output_root" "$RUNNER_TEMP/native-contract-android"
+          java -version 2> "$RUNNER_TEMP/native-contract-android/java-version.log"
+
+      - name: Build included JVM jar, debug APK and instrumentation APK
+        shell: bash
+        env:
+          GRADLE_USER_HOME: ${{ runner.temp }}/native-contract-gradle-home
+        run: |
+          set -euo pipefail
+          ./apps/android-demo/gradlew -p apps/android-demo \
+            :contract-async:jar :app:assembleDebug :app:assembleDebugAndroidTest \
+            2>&1 | tee "$RUNNER_TEMP/native-contract-android/preflight-build.log"
+
+      # x86_64 emulation needs /dev/kvm; GitHub's documented step grants the runner
+      # user access (changelog 2024-04-02, hardware accelerated Android virtualization).
+      - name: Enable KVM group perms
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Create this run's owned Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/ci-native-devices.py prepare --platform android \
+            --output "$RUNNER_TEMP/native-contract-android/owned-device" \
+            --run-id "$RUN_LABEL" --github-env "$GITHUB_ENV"
+
+      - name: Run Android-bound frozen stages
+        shell: bash
+        env:
+          GRADLE_USER_HOME: ${{ runner.temp }}/native-contract-gradle-home
+          CONTINUE_FLAG: ${{ inputs.continue_after_failure && '--continue-after-failure' || '' }}
+        run: |
+          set -euo pipefail
+          manifest="$GITHUB_WORKSPACE/reports/standalone/${RUN_LABEL}-manifest/manifest.json"
+          digest_file="${manifest%.json}.sha256"
+          test -s "$manifest"
+          test -s "$digest_file"
+          manifest_digest="$(cat "$digest_file")"
+          # Stage evidence stays in files; progress lines (stage, build, case and command
+          # start/end with elapsed seconds) stream into this log while the stages run.
+          export NATIVE_CONTRACT_PROGRESS_LOG="$RUNNER_TEMP/native-contract-android/progress.log"
+          : > "$NATIVE_CONTRACT_PROGRESS_LOG"
+          tail -n +1 -f "$NATIVE_CONTRACT_PROGRESS_LOG" &
+          progress_tail=$!
+          set +e
+          python -m integration.reproduce run-stages \
+            --candidate "$GITHUB_WORKSPACE" \
+            --output "$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT" \
+            --manifest "$manifest" \
+            --manifest-digest "$manifest_digest" \
+            --stage candidate-android --stage integration-controls ${CONTINUE_FLAG:-} \
+            > "$RUNNER_TEMP/native-contract-android/stages.stdout.log" \
+            2> "$RUNNER_TEMP/native-contract-android/stages.stderr.log"
+          stage_status=$?
+          sleep 1
+          kill "$progress_tail" 2>/dev/null
+          suite_report="$GITHUB_WORKSPACE/$NATIVE_CONTRACT_OUTPUT_ROOT/suite-report.json"
+          if [[ -s "$suite_report" ]]; then
+            python -m integration.progress summary "$suite_report" --title "Android ledger" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          set -e
+          if [[ "$stage_status" -ne 0 && "$stage_status" -ne 3 ]]; then
+            echo "::error title=Android ledger::run-stages exited $stage_status; stderr tail follows"
+            tail -n 40 "$RUNNER_TEMP/native-contract-android/stages.stderr.log" || true
+            exit "$stage_status"
+          fi
+
+      - name: Clean up only this run's emulator
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          device_dir="$RUNNER_TEMP/native-contract-android/owned-device"
+          output_root="${NATIVE_CONTRACT_OUTPUT_ROOT:-reports/standalone/attempts/${RUN_LABEL}-manifest}"
+          mkdir -p "$GITHUB_WORKSPACE/$output_root/owned-device"
+          if [[ -f "$device_dir/ownership.json" ]]; then
+            python scripts/ci-native-devices.py cleanup --output "$device_dir"
+            cp -R "$device_dir/." "$GITHUB_WORKSPACE/$output_root/owned-device/"
+          else
+            printf '%s\n' '{"classification":"NOT_RUN","detail":"owned emulator creation did not complete"}' \
+              > "$GITHUB_WORKSPACE/$output_root/owned-device/bootstrap-status.json"
+          fi
+          if [[ -d "$RUNNER_TEMP/native-contract-android" ]]; then
+            cp -R "$RUNNER_TEMP/native-contract-android/." "$GITHUB_WORKSPACE/$output_root/android-runner-logs/"
+          fi
+
+      - name: Upload Android portable ledger
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: standalone-android-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/derived-data/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/preflight-derived-data/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/gradle-home/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/.gradle/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/.swift-cache/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/candidate-copy/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/__pycache__/**
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/*.pyc
+            !${{ env.NATIVE_CONTRACT_OUTPUT_ROOT }}/**/.DS_Store
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 90
+
+  native-acceptance:
+    name: Recheck and aggregate both platform ledgers
+    if: >-
+      always() &&
+      (github.event.action != 'labeled' || github.event.label.name == 'native-ci') &&
+      (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'native-ci'))
+    needs: [evaluator-and-freeze, ios-native, android-native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      RUN_LABEL: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select pinned Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: 3.12.8
+
+      - name: Download frozen manifest
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-manifest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/${{ env.RUN_LABEL }}-manifest
+
+      - name: Download iOS ledger
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-ios-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/imported-${{ env.RUN_LABEL }}-ios
+
+      - name: Download Android ledger
+        if: always()
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: standalone-android-ledger-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/standalone/imported-${{ env.RUN_LABEL }}-android
+
+      - name: Recheck portable ledgers and derive final verdict
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="reports/standalone/${RUN_LABEL}-manifest/manifest.json"
+          digest_file="reports/standalone/${RUN_LABEL}-manifest/manifest.sha256"
+          if [[ ! -s "$manifest" || ! -s "$digest_file" ]]; then
+            printf '%s\n' '{"classification":"INFRA_FAILURE","detail":"frozen manifest or digest artifact is missing"}' \
+              > "reports/standalone/${RUN_LABEL}-aggregate.json"
+            exit 2
+          fi
+          python -m integration.aggregate \
+            --candidate "$GITHUB_WORKSPACE" \
+            --manifest "$manifest" --manifest-digest "$(cat "$digest_file")" \
+            --ios-ledger "reports/standalone/imported-${RUN_LABEL}-ios" \
+            --android-ledger "reports/standalone/imported-${RUN_LABEL}-android" \
+            --output "reports/standalone/${RUN_LABEL}-aggregate.json" \
+            > "$RUNNER_TEMP/native-contract-aggregate.stdout.log" \
+            2> "$RUNNER_TEMP/native-contract-aggregate.stderr.log"
+
+      - name: Upload final aggregate and imported evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: standalone-native-aggregate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            reports/standalone/${{ env.RUN_LABEL }}-aggregate.json
+            reports/standalone/imported-${{ env.RUN_LABEL }}-ios
+            reports/standalone/imported-${{ env.RUN_LABEL }}-android
+            ${{ runner.temp }}/native-contract-aggregate.*.log
+          if-no-files-found: warn
+          retention-days: 90

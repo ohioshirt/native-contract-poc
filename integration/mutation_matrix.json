@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "mutations": [
+    {
+      "id": "N1-stale-payload-commit",
+      "description": "Admit every transport success even when the managed session rejects the captured request.",
+      "expectedControls": {
+        "CTRL-N1-LOGOUT": ["I2", "I3"],
+        "CTRL-N1-NEW-LOGIN": ["I2", "I4"]
+      },
+      "anchors": {
+        "swift": {
+          "path": "apps/ios-demo/NativeContractDemo/Coordinator/SessionCoordinator.swift",
+          "function": "handleRefreshCompletion",
+          "before": "let admittedSuccess = eligible && acceptedSuccess",
+          "after": "let admittedSuccess = completion.outcome.isSuccess"
+        },
+        "kotlin": {
+          "path": "apps/android-demo/app/src/main/java/nativecontract/demo/coordinator/SessionCoordinator.kt",
+          "function": "handleRefreshCompletion",
+          "before": "val admittedSuccess = eligible && acceptedSuccess",
+          "after": "val admittedSuccess = completion.outcome.isSuccess"
+        }
+      }
+    },
+    {
+      "id": "N2-duplicate-deferred-clear",
+      "description": "Schedule a second detached clear with the completed Logout's origin after its normal verified clear.",
+      "expectedControls": {"CTRL-N2-LATE-CLEAR": ["I4"]},
+      "isolatedHelperRequired": true,
+      "anchors": {
+        "swift": {
+          "path": "apps/ios-demo/NativeContractDemo/Coordinator/SessionCoordinator.swift",
+          "function": "handleLogout",
+          "before": "try await clearThenPublishSignedOut(commandID: commandID)",
+          "after": "try await debugClearThenScheduleDuplicate(commandID: commandID)"
+        },
+        "kotlin": {
+          "path": "apps/android-demo/app/src/main/java/nativecontract/demo/coordinator/SessionCoordinator.kt",
+          "function": "handleLogout",
+          "before": "clearThenPublishSignedOut(commandId)",
+          "after": "debugClearThenScheduleDuplicate(commandId)"
+        }
+      }
+    },
+    {
+      "id": "N3-unverified-auth-publication",
+      "description": "Publish the refreshed credential before its verified store replacement.",
+      "expectedControls": {"CTRL-N3-EARLY-PUBLISH": ["I6"]},
+      "anchors": {
+        "swift": {
+          "path": "apps/ios-demo/NativeContractDemo/Coordinator/SessionCoordinator.swift",
+          "function": "commitRefreshSuccess",
+          "before": "try store.replaceVerified(credential)\nawait publishSignedIn(credential, commandID: commandID)",
+          "after": "await publishSignedIn(credential, commandID: commandID)\ntry store.replaceVerified(credential)"
+        },
+        "kotlin": {
+          "path": "apps/android-demo/app/src/main/java/nativecontract/demo/coordinator/SessionCoordinator.kt",
+          "function": "commitRefreshSuccess",
+          "before": "store.replaceVerified(credential)\npublishSignedIn(credential, commandId)",
+          "after": "publishSignedIn(credential, commandId)\nstore.replaceVerified(credential)"
+        }
+      }
+    },
+    {
+      "id": "N4-false-logout-ack",
+      "description": "Return Completed after a Logout storage-clear failure without verified deletion.",
+      "expectedControls": {"CTRL-N4-FALSE-LOGOUT": ["I5", "I8"]},
+      "isolatedHelperRequired": true,
+      "anchors": {
+        "swift": {
+          "path": "apps/ios-demo/NativeContractDemo/Coordinator/SessionCoordinator.swift",
+          "function": "handleLogoutClearFailure",
+          "before": "return await lockAfterStoreFailure(error, commandID: commandID)",
+          "after": "return await debugFalseLogoutReceipt(commandID: commandID)"
+        },
+        "kotlin": {
+          "path": "apps/android-demo/app/src/main/java/nativecontract/demo/coordinator/SessionCoordinator.kt",
+          "function": "handleLogoutClearFailure",
+          "before": "return lockAfterStoreFailure(error, commandId)",
+          "after": "return debugFalseLogoutReceipt(commandId)"
+        }
+      }
+    }
+  ]
+}

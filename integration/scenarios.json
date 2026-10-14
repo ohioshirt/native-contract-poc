@@ -1,0 +1,1869 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "APP-01",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,success)"
+          ]
+        }
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredProbes": [
+        "APP-01-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-01-final-view"
+      ],
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "A",
+          "version": 1
+        },
+        "view": {
+          "phase": "SignedIn",
+          "account": "A"
+        }
+      },
+      "probeExpectations": {
+        "APP-01-final-probe": {
+          "kind": "Present",
+          "account": "A",
+          "version": 1
+        }
+      },
+      "renderExpectations": {
+        "APP-01-final-view": {
+          "phase": "SignedIn",
+          "account": "A"
+        }
+      },
+      "probeExpectationInvariants": {
+        "APP-01-final-probe": "I6"
+      },
+      "renderExpectationInvariants": {
+        "APP-01-final-view": "I6"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-02",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout",
+            "Deliver(slot-A1,success)"
+          ]
+        }
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "releaseRequested",
+        "responseWritten",
+        "completionProcessedObserved"
+      ],
+      "requiredProbes": [
+        "APP-02-after-logout-store",
+        "APP-02-final-probe"
+      ],
+      "probeExpectations": {
+        "APP-02-after-logout-store": {
+          "kind": "Absent"
+        },
+        "APP-02-final-probe": {
+          "kind": "Absent"
+        }
+      },
+      "requiredRenderedViews": [
+        "APP-02-after-logout-view",
+        "APP-02-final-view"
+      ],
+      "renderExpectations": {
+        "APP-02-after-logout-view": {
+          "phase": "SignedOut",
+          "account": null
+        },
+        "APP-02-final-view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "releaseAfterProbes": [
+        "APP-02-after-logout-store"
+      ],
+      "releaseAfterCommand": "Logout",
+      "receiptProbeOrder": [
+        [
+          "Logout",
+          "APP-02-after-logout-store"
+        ]
+      ],
+      "expectedFinal": {
+        "store": {
+          "kind": "Absent"
+        },
+        "view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "probeExpectationInvariants": {
+        "APP-02-after-logout-store": "I5",
+        "APP-02-final-probe": "I2"
+      },
+      "renderExpectationInvariants": {
+        "APP-02-after-logout-view": "I3",
+        "APP-02-final-view": "I3"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-03",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout",
+            "Deliver(slot-A1,failure)"
+          ]
+        }
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredProbes": [
+        "APP-03-after-logout-store",
+        "APP-03-final-probe"
+      ],
+      "probeExpectations": {
+        "APP-03-after-logout-store": {
+          "kind": "Absent"
+        },
+        "APP-03-final-probe": {
+          "kind": "Absent"
+        }
+      },
+      "requiredRenderedViews": [
+        "APP-03-after-logout-view",
+        "APP-03-final-view"
+      ],
+      "renderExpectations": {
+        "APP-03-after-logout-view": {
+          "phase": "SignedOut",
+          "account": null
+        },
+        "APP-03-final-view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "failure"
+      },
+      "releaseAfterProbes": [
+        "APP-03-after-logout-store"
+      ],
+      "releaseAfterCommand": "Logout",
+      "receiptProbeOrder": [
+        [
+          "Logout",
+          "APP-03-after-logout-store"
+        ]
+      ],
+      "expectedFinal": {
+        "store": {
+          "kind": "Absent"
+        },
+        "view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "completionProcessedObserved"
+      ],
+      "probeExpectationInvariants": {
+        "APP-03-after-logout-store": "I5",
+        "APP-03-final-probe": "I2"
+      },
+      "renderExpectationInvariants": {
+        "APP-03-after-logout-view": "I3",
+        "APP-03-final-view": "I3"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-04",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout",
+            "Login(B)",
+            "Deliver(slot-A1,success)"
+          ]
+        }
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredProbes": [
+        "APP-04-after-logout-store",
+        "APP-04-after-login-b-store",
+        "APP-04-final-probe"
+      ],
+      "probeExpectations": {
+        "APP-04-after-logout-store": {
+          "kind": "Absent"
+        },
+        "APP-04-after-login-b-store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "APP-04-final-probe": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        }
+      },
+      "requiredRenderedViews": [
+        "APP-04-after-logout-view",
+        "APP-04-after-login-b-view",
+        "APP-04-final-view"
+      ],
+      "renderExpectations": {
+        "APP-04-after-logout-view": {
+          "phase": "SignedOut",
+          "account": null
+        },
+        "APP-04-after-login-b-view": {
+          "phase": "SignedIn",
+          "account": "B"
+        },
+        "APP-04-final-view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "releaseAfterProbes": [
+        "APP-04-after-logout-store",
+        "APP-04-after-login-b-store"
+      ],
+      "releaseAfterCommand": "Login(B)",
+      "receiptProbeOrder": [
+        [
+          "Logout",
+          "APP-04-after-logout-store"
+        ],
+        [
+          "Login(B)",
+          "APP-04-after-login-b-store"
+        ]
+      ],
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "completionProcessedObserved"
+      ],
+      "probeExpectationInvariants": {
+        "APP-04-after-logout-store": "I5",
+        "APP-04-after-login-b-store": "I2",
+        "APP-04-final-probe": "I4"
+      },
+      "renderExpectationInvariants": {
+        "APP-04-after-logout-view": "I3",
+        "APP-04-after-login-b-view": "I6",
+        "APP-04-final-view": "I4"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-05",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout",
+            "Login(B)",
+            "Deliver(slot-A1,failure)"
+          ]
+        }
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredProbes": [
+        "APP-05-after-logout-store",
+        "APP-05-after-login-b-store",
+        "APP-05-final-probe"
+      ],
+      "probeExpectations": {
+        "APP-05-after-logout-store": {
+          "kind": "Absent"
+        },
+        "APP-05-after-login-b-store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "APP-05-final-probe": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        }
+      },
+      "requiredRenderedViews": [
+        "APP-05-after-logout-view",
+        "APP-05-after-login-b-view",
+        "APP-05-final-view"
+      ],
+      "renderExpectations": {
+        "APP-05-after-logout-view": {
+          "phase": "SignedOut",
+          "account": null
+        },
+        "APP-05-after-login-b-view": {
+          "phase": "SignedIn",
+          "account": "B"
+        },
+        "APP-05-final-view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "failure"
+      },
+      "releaseAfterProbes": [
+        "APP-05-after-logout-store",
+        "APP-05-after-login-b-store"
+      ],
+      "releaseAfterCommand": "Login(B)",
+      "receiptProbeOrder": [
+        [
+          "Logout",
+          "APP-05-after-logout-store"
+        ],
+        [
+          "Login(B)",
+          "APP-05-after-login-b-store"
+        ]
+      ],
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "completionProcessedObserved"
+      ],
+      "probeExpectationInvariants": {
+        "APP-05-after-logout-store": "I5",
+        "APP-05-after-login-b-store": "I2",
+        "APP-05-final-probe": "I4"
+      },
+      "renderExpectationInvariants": {
+        "APP-05-after-logout-view": "I3",
+        "APP-05-after-login-b-view": "I6",
+        "APP-05-final-view": "I4"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-06",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,success)",
+            "Deliver(replay,success)"
+          ]
+        }
+      ],
+      "controls": [
+        "replayLastCompletion"
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredProbes": [
+        "APP-06-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-06-final-view"
+      ],
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "replayCount": 1,
+      "serverResponsesPerRequest": 1,
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "A",
+          "version": 1
+        },
+        "view": {
+          "phase": "SignedIn",
+          "account": "A"
+        }
+      },
+      "probeExpectations": {
+        "APP-06-final-probe": {
+          "kind": "Present",
+          "account": "A",
+          "version": 1
+        }
+      },
+      "renderExpectations": {
+        "APP-06-final-view": {
+          "phase": "SignedIn",
+          "account": "A"
+        }
+      },
+      "probeExpectationInvariants": {
+        "APP-06-final-probe": "I7"
+      },
+      "renderExpectationInvariants": {
+        "APP-06-final-view": "I7"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-07",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Expire",
+            "Deliver(current,success)",
+            "Expire"
+          ]
+        }
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredProbes": [
+        "APP-07-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-07-final-view"
+      ],
+      "expectedIssuance": [
+        {
+          "requestId": 1,
+          "slotId": "slot-A1"
+        },
+        {
+          "requestId": 2,
+          "slotId": "slot-A2"
+        }
+      ],
+      "requiredServerRequestCount": 2,
+      "expectedDeliveries": [
+        {
+          "slotId": "slot-A1",
+          "outcome": "success"
+        }
+      ],
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "A",
+          "version": 1
+        },
+        "view": {
+          "phase": "Refreshing",
+          "account": "A"
+        }
+      },
+      "probeExpectations": {
+        "APP-07-final-probe": {
+          "kind": "Present",
+          "account": "A",
+          "version": 1
+        }
+      },
+      "renderExpectations": {
+        "APP-07-final-view": {
+          "phase": "Refreshing",
+          "account": "A"
+        }
+      },
+      "probeExpectationInvariants": {
+        "APP-07-final-probe": "I6"
+      },
+      "renderExpectationInvariants": {
+        "APP-07-final-view": "I6"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-08",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "CancelRefresh",
+            "Deliver(slot-A1,success)"
+          ]
+        }
+      ],
+      "requiredProbes": [
+        "APP-08-after-cancel-store",
+        "APP-08-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-08-after-cancel-view",
+        "APP-08-final-view"
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "completionProcessedObserved"
+      ],
+      "probeExpectations": {
+        "APP-08-after-cancel-store": {
+          "kind": "Absent"
+        },
+        "APP-08-final-probe": {
+          "kind": "Absent"
+        }
+      },
+      "renderExpectations": {
+        "APP-08-after-cancel-view": {
+          "phase": "SignedOut",
+          "account": null
+        },
+        "APP-08-final-view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "releaseAfterCommand": "CancelRefresh",
+      "receiptProbeOrder": [
+        [
+          "CancelRefresh",
+          "APP-08-after-cancel-store"
+        ]
+      ],
+      "releaseAfterProbes": [
+        "APP-08-after-cancel-store"
+      ],
+      "expectedFinal": {
+        "store": {
+          "kind": "Absent"
+        },
+        "view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "probeExpectationInvariants": {
+        "APP-08-after-cancel-store": "I5",
+        "APP-08-final-probe": "I7"
+      },
+      "renderExpectationInvariants": {
+        "APP-08-after-cancel-view": "I3",
+        "APP-08-final-view": "I7"
+      },
+      "cancelMode": "disabled",
+      "expectedTransport": {
+        "command": "Deliver(slot-A1,success)",
+        "outcome": "success",
+        "failureCode": null,
+        "invariant": "I7"
+      }
+    },
+    {
+      "id": "APP-09",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "variants": [
+        {
+          "id": "replace-before",
+          "fault": "replaceBefore",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,success)"
+          ],
+          "receiptExpectations": [
+            {
+              "command": "Deliver(current,success)",
+              "status": "FaultLocked",
+              "invariant": "I8"
+            }
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Absent"
+            },
+            "view": {
+              "phase": "FaultLocked",
+              "account": null
+            }
+          },
+          "expectedTransport": {
+            "command": "Deliver(current,success)",
+            "outcome": "success",
+            "failureCode": null,
+            "invariant": "I8"
+          },
+          "receiptStoreExpectation": {
+            "command": "Deliver(current,success)",
+            "store": {
+              "kind": "Absent"
+            }
+          },
+          "faultObservation": {
+            "kind": "Present",
+            "account": "A",
+            "version": 0
+          }
+        },
+        {
+          "id": "replace-after-before-verify",
+          "fault": "replaceAfterBeforeVerify",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,success)"
+          ],
+          "receiptExpectations": [
+            {
+              "command": "Deliver(current,success)",
+              "status": "FaultLocked",
+              "invariant": "I8"
+            }
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Absent"
+            },
+            "view": {
+              "phase": "FaultLocked",
+              "account": null
+            }
+          },
+          "expectedTransport": {
+            "command": "Deliver(current,success)",
+            "outcome": "success",
+            "failureCode": null,
+            "invariant": "I8"
+          },
+          "receiptStoreExpectation": {
+            "command": "Deliver(current,success)",
+            "store": {
+              "kind": "Absent"
+            }
+          },
+          "faultObservation": {
+            "kind": "Unknown",
+            "errorCode": "readFailed"
+          }
+        }
+      ],
+      "controls": [
+        "injectStoreFault",
+        "probeStore"
+      ],
+      "requiredProbes": [
+        "APP-09-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-09-final-view"
+      ],
+      "requiredControllerEvents": [
+        "requestHeld",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "receiptObserved",
+        "completionProcessedObserved",
+        "probeCaptured"
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "probeExpectationInvariants": {
+        "APP-09-final-probe": "I8"
+      },
+      "renderExpectationInvariants": {
+        "APP-09-final-view": "I8"
+      },
+      "cancelMode": "disabled",
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "APP-10",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "variants": [
+        {
+          "id": "clear-before",
+          "fault": "clearBefore",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Logout",
+            "RetryCleanup",
+            "Login(B)"
+          ],
+          "probeBeforeRetry": {
+            "kind": "Present",
+            "account": "A",
+            "version": 0
+          },
+          "receiptStoreExpectation": {
+            "command": "Logout",
+            "store": {
+              "kind": "Present",
+              "account": "A",
+              "version": 0
+            }
+          },
+          "receiptExpectations": [
+            {
+              "command": "Logout",
+              "status": "FaultLocked",
+              "invariant": "I8"
+            },
+            {
+              "command": "RetryCleanup",
+              "status": "Completed",
+              "invariant": "I8"
+            },
+            {
+              "command": "Login(B)",
+              "status": "Completed",
+              "invariant": "I2"
+            }
+          ],
+          "probeExpectations": {
+            "APP-10-after-retry": {
+              "kind": "Absent"
+            }
+          },
+          "expectedFinal": {
+            "store": {
+              "kind": "Present",
+              "account": "B",
+              "version": 0
+            },
+            "view": {
+              "phase": "SignedIn",
+              "account": "B"
+            }
+          },
+          "renderExpectations": {
+            "APP-10-final-view": {
+              "phase": "SignedIn",
+              "account": "B"
+            }
+          }
+        },
+        {
+          "id": "clear-after-before-verify",
+          "fault": "clearAfterBeforeVerify",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Logout",
+            "RetryCleanup",
+            "Login(B)"
+          ],
+          "probeBeforeRetry": {
+            "kind": "Absent"
+          },
+          "receiptStoreExpectation": {
+            "command": "Logout",
+            "store": {
+              "kind": "Unknown",
+              "errorCode": "readFailed"
+            }
+          },
+          "receiptExpectations": [
+            {
+              "command": "Logout",
+              "status": "FaultLocked",
+              "invariant": "I8"
+            },
+            {
+              "command": "RetryCleanup",
+              "status": "Completed",
+              "invariant": "I8"
+            },
+            {
+              "command": "Login(B)",
+              "status": "Completed",
+              "invariant": "I2"
+            }
+          ],
+          "probeExpectations": {
+            "APP-10-after-retry": {
+              "kind": "Absent"
+            }
+          },
+          "expectedFinal": {
+            "store": {
+              "kind": "Present",
+              "account": "B",
+              "version": 0
+            },
+            "view": {
+              "phase": "SignedIn",
+              "account": "B"
+            }
+          },
+          "renderExpectations": {
+            "APP-10-final-view": {
+              "phase": "SignedIn",
+              "account": "B"
+            }
+          }
+        }
+      ],
+      "controls": [
+        "injectStoreFault",
+        "probeStore"
+      ],
+      "requiredProbes": [
+        "APP-10-after-failed-logout",
+        "APP-10-after-retry",
+        "APP-10-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-10-final-view"
+      ],
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "checkpointPublished"
+      ],
+      "receiptProbeOrder": [
+        [
+          "Logout",
+          "APP-10-after-failed-logout"
+        ],
+        [
+          "RetryCleanup",
+          "APP-10-after-retry"
+        ]
+      ],
+      "probeExpectationInvariants": {
+        "APP-10-after-failed-logout": "I8",
+        "APP-10-after-retry": "I8",
+        "APP-10-final-probe": "I2"
+      },
+      "renderExpectationInvariants": {
+        "APP-10-final-view": "I6"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-10-RECOVER-OLD",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "fault": "clearBefore",
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout(failed)",
+            "RetryCleanup",
+            "Login(B)",
+            "Deliver(slot-A1,success)"
+          ]
+        }
+      ],
+      "controls": [
+        "injectStoreFault",
+        "probeStore"
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredProbes": [
+        "APP-10-RECOVER-OLD-after-failed-logout",
+        "APP-10-RECOVER-OLD-after-retry",
+        "APP-10-RECOVER-OLD-after-login-b",
+        "APP-10-RECOVER-OLD-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-10-RECOVER-OLD-final-view"
+      ],
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      },
+      "probeExpectations": {
+        "APP-10-RECOVER-OLD-after-failed-logout": {
+          "kind": "Present",
+          "account": "A",
+          "version": 0
+        },
+        "APP-10-RECOVER-OLD-after-retry": {
+          "kind": "Absent"
+        },
+        "APP-10-RECOVER-OLD-after-login-b": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "APP-10-RECOVER-OLD-final-probe": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        }
+      },
+      "renderExpectations": {
+        "APP-10-RECOVER-OLD-final-view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        },
+        "view": {
+          "phase": "SignedIn",
+          "account": "B"
+        }
+      },
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "releaseRequested",
+        "releaseAccepted",
+        "responseWritten",
+        "completionProcessedObserved"
+      ],
+      "receiptExpectations": [
+        {
+          "command": "Logout(failed)",
+          "status": "FaultLocked",
+          "invariant": "I8"
+        },
+        {
+          "command": "RetryCleanup",
+          "status": "Completed",
+          "invariant": "I8"
+        },
+        {
+          "command": "Login(B)",
+          "status": "Completed",
+          "invariant": "I2"
+        },
+        {
+          "command": "Deliver(slot-A1,success)",
+          "status": "IgnoredForeign",
+          "invariant": "I4"
+        }
+      ],
+      "expectedTransport": {
+        "command": "Deliver(slot-A1,success)",
+        "outcome": "success",
+        "failureCode": null,
+        "invariant": "I4"
+      },
+      "receiptStoreExpectation": {
+        "command": "Deliver(slot-A1,success)",
+        "store": {
+          "kind": "Present",
+          "account": "B",
+          "version": 0
+        }
+      },
+      "releaseAfterCommand": "Login(B)",
+      "releaseAfterProbes": [
+        "APP-10-RECOVER-OLD-after-failed-logout",
+        "APP-10-RECOVER-OLD-after-retry",
+        "APP-10-RECOVER-OLD-after-login-b"
+      ],
+      "receiptProbeOrder": [
+        [
+          "Logout(failed)",
+          "APP-10-RECOVER-OLD-after-failed-logout"
+        ],
+        [
+          "RetryCleanup",
+          "APP-10-RECOVER-OLD-after-retry"
+        ],
+        [
+          "Login(B)",
+          "APP-10-RECOVER-OLD-after-login-b"
+        ]
+      ],
+      "probeExpectationInvariants": {
+        "APP-10-RECOVER-OLD-after-failed-logout": "I8",
+        "APP-10-RECOVER-OLD-after-retry": "I8",
+        "APP-10-RECOVER-OLD-after-login-b": "I2",
+        "APP-10-RECOVER-OLD-final-probe": "I4"
+      },
+      "renderExpectationInvariants": {
+        "APP-10-RECOVER-OLD-final-view": "I4"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-11",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "variants": [
+        {
+          "id": "store-pause",
+          "barrier": "beforeStore",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,success)",
+            "Logout",
+            "Login(B)"
+          ],
+          "queuedOrder": [
+            "Logout",
+            "Login(B)"
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Present",
+              "account": "B",
+              "version": 0
+            },
+            "view": {
+              "phase": "SignedIn",
+              "account": "B"
+            }
+          },
+          "receiptExpectations": [
+            {
+              "command": "Deliver(current,success)",
+              "status": "Completed",
+              "invariant": "I7"
+            },
+            {
+              "command": "Logout",
+              "status": "Completed",
+              "invariant": "I5"
+            },
+            {
+              "command": "Login(B)",
+              "status": "Completed",
+              "invariant": "I2"
+            }
+          ]
+        },
+        {
+          "id": "publish-pause",
+          "barrier": "beforePublish",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,success)",
+            "Logout",
+            "Login(B)"
+          ],
+          "queuedOrder": [
+            "Logout",
+            "Login(B)"
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Present",
+              "account": "B",
+              "version": 0
+            },
+            "view": {
+              "phase": "SignedIn",
+              "account": "B"
+            }
+          },
+          "receiptExpectations": [
+            {
+              "command": "Deliver(current,success)",
+              "status": "Completed",
+              "invariant": "I7"
+            },
+            {
+              "command": "Logout",
+              "status": "Completed",
+              "invariant": "I5"
+            },
+            {
+              "command": "Login(B)",
+              "status": "Completed",
+              "invariant": "I2"
+            }
+          ]
+        }
+      ],
+      "controls": [
+        "arm",
+        "awaitArrival",
+        "release",
+        "snapshot"
+      ],
+      "requiredProbes": [
+        "APP-11-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-11-final-view"
+      ],
+      "requiredControllerEvents": [
+        "hookArrived",
+        "hookReleased",
+        "receiptObserved",
+        "probeCaptured"
+      ],
+      "probeExpectationInvariants": {
+        "APP-11-final-probe": "I1"
+      },
+      "renderExpectationInvariants": {
+        "APP-11-final-view": "I1"
+      },
+      "cancelMode": "disabled",
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "APP-12-SAVED",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "commands": [
+            "Bootstrap"
+          ]
+        }
+      ],
+      "controls": [
+        "arm",
+        "awaitArrival",
+        "probeStore",
+        "release"
+      ],
+      "requiredControllerEvents": [
+        "terminated",
+        "forceStopped",
+        "bootstrapHookArrived",
+        "probeCaptured",
+        "checkpointPublished",
+        "hookReleased"
+      ],
+      "requiredServerEvents": [
+        "checkpointPublished"
+      ],
+      "requiredProbes": [
+        "APP-12-p2-before-bootstrap-clear",
+        "APP-12-final-probe"
+      ],
+      "probeExpectations": {
+        "APP-12-p2-before-bootstrap-clear": {
+          "kind": "Present",
+          "account": "A",
+          "version": 0
+        },
+        "APP-12-final-probe": {
+          "kind": "Absent"
+        }
+      },
+      "requiredRenderedViews": [
+        "APP-12-final-view"
+      ],
+      "renderExpectations": {
+        "APP-12-final-view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Absent"
+        },
+        "view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "probeExpectationInvariants": {
+        "APP-12-p2-before-bootstrap-clear": "I9",
+        "APP-12-final-probe": "I9"
+      },
+      "renderExpectationInvariants": {
+        "APP-12-final-view": "I9"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-12-LOGGED-OUT",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Logout"
+          ]
+        },
+        {
+          "ordinal": 2,
+          "commands": [
+            "Bootstrap"
+          ]
+        }
+      ],
+      "controls": [
+        "arm",
+        "awaitArrival",
+        "probeStore",
+        "release"
+      ],
+      "requiredControllerEvents": [
+        "terminated",
+        "forceStopped",
+        "bootstrapHookArrived",
+        "probeCaptured",
+        "checkpointPublished",
+        "hookReleased"
+      ],
+      "requiredServerEvents": [
+        "checkpointPublished"
+      ],
+      "requiredProbes": [
+        "APP-12-LOGGED-OUT-p2-before-bootstrap-clear",
+        "APP-12-LOGGED-OUT-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-12-LOGGED-OUT-final-view"
+      ],
+      "probeExpectations": {
+        "APP-12-LOGGED-OUT-p2-before-bootstrap-clear": {
+          "kind": "Absent"
+        },
+        "APP-12-LOGGED-OUT-final-probe": {
+          "kind": "Absent"
+        }
+      },
+      "renderExpectations": {
+        "APP-12-LOGGED-OUT-final-view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Absent"
+        },
+        "view": {
+          "phase": "SignedOut",
+          "account": null
+        }
+      },
+      "probeExpectationInvariants": {
+        "APP-12-LOGGED-OUT-p2-before-bootstrap-clear": "I9",
+        "APP-12-LOGGED-OUT-final-probe": "I9"
+      },
+      "renderExpectationInvariants": {
+        "APP-12-LOGGED-OUT-final-view": "I9"
+      },
+      "cancelMode": "disabled"
+    },
+    {
+      "id": "APP-13",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "variants": [
+        {
+          "id": "http500-current",
+          "outcome": "http500",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,serverError)"
+          ],
+          "expectedTransport": {
+            "command": "Deliver(current,serverError)",
+            "outcome": "failure",
+            "failureCode": "server",
+            "invariant": "I8"
+          },
+          "requiredServerEvents": [
+            "http500",
+            "responseWritten"
+          ],
+          "receiptExpectations": [
+            {
+              "command": "Deliver(current,serverError)",
+              "status": "Completed",
+              "invariant": "I8"
+            }
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Absent"
+            },
+            "view": {
+              "phase": "SignedOut",
+              "account": null
+            }
+          },
+          "renderExpectations": {
+            "APP-13-final-view": {
+              "phase": "SignedOut",
+              "account": null
+            }
+          },
+          "requiredControllerEvents": [
+            "receiptObserved",
+            "probeCaptured",
+            "completionProcessedObserved",
+            "releaseRequested",
+            "releaseAccepted",
+            "responseWritten"
+          ]
+        },
+        {
+          "id": "malformed-current",
+          "outcome": "malformed",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,malformed)"
+          ],
+          "expectedTransport": {
+            "command": "Deliver(current,malformed)",
+            "outcome": "failure",
+            "failureCode": "malformed",
+            "invariant": "I8"
+          },
+          "requiredServerEvents": [
+            "malformed",
+            "responseWritten"
+          ],
+          "receiptExpectations": [
+            {
+              "command": "Deliver(current,malformed)",
+              "status": "Completed",
+              "invariant": "I8"
+            }
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Absent"
+            },
+            "view": {
+              "phase": "SignedOut",
+              "account": null
+            }
+          },
+          "renderExpectations": {
+            "APP-13-final-view": {
+              "phase": "SignedOut",
+              "account": null
+            }
+          },
+          "requiredControllerEvents": [
+            "receiptObserved",
+            "probeCaptured",
+            "completionProcessedObserved",
+            "releaseRequested",
+            "releaseAccepted",
+            "responseWritten"
+          ]
+        },
+        {
+          "id": "disconnect-current",
+          "outcome": "disconnect",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,disconnected)"
+          ],
+          "expectedTransport": {
+            "command": "Deliver(current,disconnected)",
+            "outcome": "failure",
+            "failureCode": "disconnected",
+            "invariant": "I8"
+          },
+          "requiredServerEvents": [
+            "disconnected"
+          ],
+          "receiptExpectations": [
+            {
+              "command": "Deliver(current,disconnected)",
+              "status": "Completed",
+              "invariant": "I8"
+            }
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Absent"
+            },
+            "view": {
+              "phase": "SignedOut",
+              "account": null
+            }
+          },
+          "renderExpectations": {
+            "APP-13-final-view": {
+              "phase": "SignedOut",
+              "account": null
+            }
+          },
+          "requiredControllerEvents": [
+            "receiptObserved",
+            "probeCaptured",
+            "completionProcessedObserved",
+            "releaseRequested",
+            "releaseAccepted",
+            "disconnected"
+          ]
+        },
+        {
+          "id": "wrong-correlation-current",
+          "outcome": "wrongCorrelation",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,correlationMismatch)"
+          ],
+          "expectedTransport": {
+            "command": "Deliver(current,correlationMismatch)",
+            "outcome": "failure",
+            "failureCode": "wrongCorrelation",
+            "invariant": "I8"
+          },
+          "requiredServerEvents": [
+            "requestHeld",
+            "releaseAccepted",
+            "wrongCorrelation",
+            "responseWritten"
+          ],
+          "receiptExpectations": [
+            {
+              "command": "Deliver(current,correlationMismatch)",
+              "status": "Completed",
+              "invariant": "I8"
+            }
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Absent"
+            },
+            "view": {
+              "phase": "SignedOut",
+              "account": null
+            }
+          },
+          "renderExpectations": {
+            "APP-13-final-view": {
+              "phase": "SignedOut",
+              "account": null
+            }
+          },
+          "requiredControllerEvents": [
+            "receiptObserved",
+            "probeCaptured",
+            "completionProcessedObserved",
+            "releaseRequested",
+            "releaseAccepted",
+            "wrongCorrelation",
+            "responseWritten"
+          ]
+        },
+        {
+          "id": "wrong-correlation-after-login-b",
+          "outcome": "wrongCorrelation",
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Logout",
+            "Login(B)",
+            "Deliver(slot-A1,correlationMismatch)"
+          ],
+          "expectedFinal": {
+            "store": {
+              "kind": "Present",
+              "account": "B",
+              "version": 0
+            },
+            "view": {
+              "phase": "SignedIn",
+              "account": "B"
+            }
+          },
+          "expectedTransport": {
+            "command": "Deliver(slot-A1,correlationMismatch)",
+            "outcome": "failure",
+            "failureCode": "wrongCorrelation",
+            "invariant": "I8"
+          },
+          "requiredServerEvents": [
+            "requestHeld",
+            "releaseAccepted",
+            "wrongCorrelation",
+            "responseWritten"
+          ],
+          "receiptExpectations": [
+            {
+              "command": "Deliver(slot-A1,correlationMismatch)",
+              "status": "IgnoredStale",
+              "invariant": "I4"
+            }
+          ],
+          "renderExpectations": {
+            "APP-13-after-logout-view": {
+              "phase": "SignedOut",
+              "account": null
+            },
+            "APP-13-after-login-b-view": {
+              "phase": "SignedIn",
+              "account": "B"
+            },
+            "APP-13-final-view": {
+              "phase": "SignedIn",
+              "account": "B"
+            }
+          },
+          "requiredControllerEvents": [
+            "receiptObserved",
+            "probeCaptured",
+            "completionProcessedObserved",
+            "releaseRequested",
+            "releaseAccepted",
+            "wrongCorrelation",
+            "responseWritten"
+          ],
+          "releaseAfterCommand": "Login(B)",
+          "releaseAfterProbes": [
+            "APP-13-after-logout-store",
+            "APP-13-after-login-b-store"
+          ],
+          "receiptProbeOrder": [
+            [
+              "Logout",
+              "APP-13-after-logout-store"
+            ],
+            [
+              "Login(B)",
+              "APP-13-after-login-b-store"
+            ]
+          ],
+          "requiredProbes": [
+            "APP-13-after-logout-store",
+            "APP-13-after-login-b-store",
+            "APP-13-final-probe"
+          ],
+          "probeExpectations": {
+            "APP-13-after-logout-store": {
+              "kind": "Absent"
+            },
+            "APP-13-after-login-b-store": {
+              "kind": "Present",
+              "account": "B",
+              "version": 0
+            },
+            "APP-13-final-probe": {
+              "kind": "Present",
+              "account": "B",
+              "version": 0
+            }
+          },
+          "requiredRenderedViews": [
+            "APP-13-after-logout-view",
+            "APP-13-after-login-b-view",
+            "APP-13-final-view"
+          ],
+          "probeExpectationInvariants": {
+            "APP-13-after-logout-store": "I5",
+            "APP-13-after-login-b-store": "I2",
+            "APP-13-final-probe": "I4"
+          },
+          "renderExpectationInvariants": {
+            "APP-13-after-logout-view": "I3",
+            "APP-13-after-login-b-view": "I6",
+            "APP-13-final-view": "I4"
+          }
+        }
+      ],
+      "requiredProbes": [
+        "APP-13-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-13-final-view"
+      ],
+      "requiredControllerEvents": [
+        "receiptObserved",
+        "probeCaptured",
+        "completionProcessedObserved"
+      ],
+      "probeExpectationInvariants": {
+        "APP-13-final-probe": "I8"
+      },
+      "renderExpectationInvariants": {
+        "APP-13-final-view": "I8"
+      },
+      "cancelMode": "disabled",
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "failure"
+      }
+    },
+    {
+      "id": "APP-14",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "launches": [
+        {
+          "ordinal": 1,
+          "commands": [
+            "Bootstrap",
+            "Login(A)",
+            "Expire",
+            "Deliver(current,success)"
+          ]
+        }
+      ],
+      "controls": [
+        "recreateView"
+      ],
+      "requiredServerEvents": [
+        "requestHeld",
+        "releaseAccepted",
+        "responseWritten"
+      ],
+      "requiredProbes": [
+        "APP-14-final-probe"
+      ],
+      "requiredRenderedViews": [
+        "APP-14-final-view"
+      ],
+      "probeExpectations": {
+        "APP-14-final-probe": {
+          "kind": "Present",
+          "account": "A",
+          "version": 1
+        }
+      },
+      "renderExpectations": {
+        "APP-14-final-view": {
+          "phase": "SignedIn",
+          "account": "A"
+        }
+      },
+      "expectedFinal": {
+        "store": {
+          "kind": "Present",
+          "account": "A",
+          "version": 1
+        },
+        "view": {
+          "phase": "SignedIn",
+          "account": "A"
+        }
+      },
+      "probeExpectationInvariants": {
+        "APP-14-final-probe": "I7"
+      },
+      "renderExpectationInvariants": {
+        "APP-14-final-view": "I7"
+      },
+      "cancelMode": "disabled",
+      "requiredDelivery": {
+        "slotId": "slot-A1",
+        "outcome": "success"
+      }
+    }
+  ]
+}

@@ -1,0 +1,2029 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Frozen native integration evidence history",
+  "type": "object",
+  "required": [
+    "version",
+    "runId",
+    "scenarioId",
+    "platform",
+    "buildHash",
+    "processInstances",
+    "controllerEvents",
+    "commandInventory",
+    "events",
+    "artifactPaths"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenarioId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "variantId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "controlId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platform": {
+      "enum": [
+        "ios",
+        "android"
+      ]
+    },
+    "buildHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "processInstances": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/process"
+      }
+    },
+    "controllerEvents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/controllerEvent"
+      }
+    },
+    "commandInventory": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nativeEvent"
+      }
+    },
+    "artifactPaths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "not": {
+        "required": [
+          "variantId"
+        ]
+      }
+    },
+    {
+      "required": [
+        "variantId"
+      ],
+      "not": {
+        "required": [
+          "controlId"
+        ]
+      }
+    },
+    {
+      "required": [
+        "controlId"
+      ],
+      "not": {
+        "required": [
+          "variantId"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "commandRef": {
+      "type": "object",
+      "required": [
+        "processInstanceId",
+        "id"
+      ],
+      "properties": {
+        "processInstanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      },
+      "additionalProperties": false
+    },
+    "eventRef": {
+      "type": "object",
+      "required": [
+        "processInstanceId",
+        "localSequence"
+      ],
+      "properties": {
+        "processInstanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "localSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      },
+      "additionalProperties": false
+    },
+    "process": {
+      "type": "object",
+      "required": [
+        "processInstanceId",
+        "launchOrdinal"
+      ],
+      "properties": {
+        "processInstanceId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "launchOrdinal": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      },
+      "additionalProperties": false
+    },
+    "command": {
+      "type": "object",
+      "required": [
+        "commandRef",
+        "name"
+      ],
+      "properties": {
+        "commandRef": {
+          "$ref": "#/$defs/commandRef"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "storeObservation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "Absent"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "account",
+            "version"
+          ],
+          "properties": {
+            "kind": {
+              "const": "Present"
+            },
+            "account": {
+              "enum": [
+                "A",
+                "B"
+              ]
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "errorCode"
+          ],
+          "properties": {
+            "kind": {
+              "const": "Unknown"
+            },
+            "errorCode": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "view": {
+      "type": "object",
+      "required": [
+        "phase",
+        "account",
+        "credentialVersion",
+        "pendingRequestId",
+        "lastCompletedCommandId",
+        "lastCommandStatus"
+      ],
+      "properties": {
+        "phase": {
+          "enum": [
+            "Booting",
+            "SignedOut",
+            "SigningOut",
+            "SignedIn",
+            "Refreshing",
+            "FaultLocked"
+          ]
+        },
+        "account": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "A",
+            "B",
+            null
+          ]
+        },
+        "credentialVersion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "pendingRequestId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "lastCompletedCommandId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "lastCommandStatus": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Completed",
+            "RejectedBusy",
+            "IgnoredStale",
+            "IgnoredForeign",
+            "RejectedExhausted",
+            "FaultLocked",
+            null
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "managedSnapshot": {
+      "type": "object",
+      "required": [
+        "ownerId",
+        "state",
+        "pendingRequestId",
+        "nextRequestId"
+      ],
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "Unauthenticated",
+            "Authenticated",
+            "Refreshing"
+          ]
+        },
+        "pendingRequestId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "nextRequestId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      },
+      "additionalProperties": false
+    },
+    "managedResult": {
+      "type": "object",
+      "required": [
+        "ownerId",
+        "state",
+        "pendingRequestId",
+        "nextRequestId",
+        "effects",
+        "rejection"
+      ],
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "Unauthenticated",
+            "Authenticated",
+            "Refreshing"
+          ]
+        },
+        "pendingRequestId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "nextRequestId": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "effect"
+                ],
+                "properties": {
+                  "effect": {
+                    "const": "ClearCredentials"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "effect",
+                  "requestId"
+                ],
+                "properties": {
+                  "effect": {
+                    "const": "RequestTokenRefresh"
+                  },
+                  "requestId": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9223372036854775807
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "rejection": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "RequestIdExhausted",
+            "ForeignRequest",
+            null
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "reducerEvent": {
+      "type": "object",
+      "required": [
+        "event"
+      ],
+      "properties": {
+        "event": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requestId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      },
+      "additionalProperties": false
+    },
+    "receiptObservation": {
+      "type": "object",
+      "required": [
+        "managed",
+        "store",
+        "view",
+        "revision"
+      ],
+      "properties": {
+        "managed": {
+          "$ref": "#/$defs/managedSnapshot"
+        },
+        "store": {
+          "$ref": "#/$defs/storeObservation"
+        },
+        "view": {
+          "$ref": "#/$defs/view"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        }
+      },
+      "additionalProperties": false
+    },
+    "nativeEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "name",
+            "processInstanceId"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "commandEnqueued"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "acknowledgedEventRef",
+            "commandRef",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "observation",
+            "processInstanceId",
+            "status"
+          ],
+          "properties": {
+            "acknowledgedEventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "commandReceipt"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "observation": {
+              "$ref": "#/$defs/receiptObservation"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "enum": [
+                "Completed",
+                "RejectedBusy",
+                "IgnoredStale",
+                "IgnoredForeign",
+                "RejectedExhausted",
+                "FaultLocked"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "processInstanceId"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "commandStarted"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "processInstanceId",
+            "receiptEventRef",
+            "slotId"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "completionProcessed"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "receiptEventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "slotId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "after",
+            "before",
+            "cause",
+            "effectId",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "operation",
+            "originCommandRef",
+            "processInstanceId",
+            "releaseActionId"
+          ],
+          "properties": {
+            "after": {
+              "$ref": "#/$defs/storeObservation"
+            },
+            "before": {
+              "$ref": "#/$defs/storeObservation"
+            },
+            "cause": {
+              "type": "string",
+              "minLength": 1
+            },
+            "effectId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "detachedStoreMutation"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "operation": {
+              "enum": [
+                "replace",
+                "clear"
+              ]
+            },
+            "originCommandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "releaseActionId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "effectId",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "observation",
+            "operation",
+            "originCommandRef",
+            "processInstanceId"
+          ],
+          "properties": {
+            "effectId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "detachedStoreReadback"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "observation": {
+              "$ref": "#/$defs/storeObservation"
+            },
+            "operation": {
+              "enum": [
+                "replace",
+                "clear"
+              ]
+            },
+            "originCommandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "actionId",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "phase",
+            "point",
+            "processInstanceId"
+          ],
+          "properties": {
+            "actionId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "hookEvent"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "phase": {
+              "enum": [
+                "armed",
+                "arrived",
+                "released"
+              ]
+            },
+            "point": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "target": {
+              "enum": [
+                "bootstrap",
+                "nextCommand",
+                "nextDelivery"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "after",
+            "before",
+            "commandRef",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "processInstanceId"
+          ],
+          "properties": {
+            "after": {
+              "$ref": "#/$defs/managedSnapshot"
+            },
+            "before": {
+              "$ref": "#/$defs/managedSnapshot"
+            },
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "managedInstanceReset"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "epochId",
+            "event",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "pre",
+            "processInstanceId",
+            "result"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "epochId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "event": {
+              "$ref": "#/$defs/reducerEvent"
+            },
+            "kind": {
+              "const": "managedReduced"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "pre": {
+              "$ref": "#/$defs/managedSnapshot"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestOwnerId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "result": {
+              "$ref": "#/$defs/managedResult"
+            },
+            "slotId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "processInstanceId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "processEnd"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "initialView",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "processInstanceId"
+          ],
+          "properties": {
+            "initialView": {
+              "$ref": "#/$defs/view"
+            },
+            "kind": {
+              "const": "processStart"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "account",
+            "commandRef",
+            "epochId",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "ownerId",
+            "processInstanceId",
+            "requestId",
+            "seedVersion",
+            "slotId",
+            "wireRequestId",
+            "wireTag"
+          ],
+          "properties": {
+            "account": {
+              "enum": [
+                "A",
+                "B"
+              ]
+            },
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "epochId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "slotIssued"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "ownerId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "seedVersion": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            },
+            "slotId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "wireRequestId": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]{0,18})$"
+            },
+            "wireTag": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "before",
+            "commandRef",
+            "fault",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "mutationApplied",
+            "observation",
+            "operation",
+            "processInstanceId",
+            "verification"
+          ],
+          "properties": {
+            "before": {
+              "$ref": "#/$defs/storeObservation"
+            },
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "fault": {
+              "enum": [
+                "replaceBefore",
+                "replaceAfterBeforeVerify",
+                "clearBefore",
+                "clearAfterBeforeVerify"
+              ]
+            },
+            "kind": {
+              "const": "storeFault"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "mutationApplied": {
+              "type": "boolean"
+            },
+            "observation": {
+              "$ref": "#/$defs/storeObservation"
+            },
+            "operation": {
+              "enum": [
+                "replace",
+                "clear"
+              ]
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "verification": {
+              "enum": [
+                "failed",
+                "notAttempted"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "after",
+            "before",
+            "cause",
+            "commandRef",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "operation",
+            "processInstanceId"
+          ],
+          "properties": {
+            "after": {
+              "$ref": "#/$defs/storeObservation"
+            },
+            "before": {
+              "$ref": "#/$defs/storeObservation"
+            },
+            "cause": {
+              "type": "string",
+              "minLength": 1
+            },
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "effectId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "epochId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "releaseActionId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "kind": {
+              "const": "storeMutation"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "operation": {
+              "enum": [
+                "replace",
+                "clear"
+              ]
+            },
+            "originCommandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "ownerId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "releaseActionId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "slotId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "observation",
+            "operation",
+            "processInstanceId"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "storeReadback"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "observation": {
+              "$ref": "#/$defs/storeObservation"
+            },
+            "operation": {
+              "enum": [
+                "replace",
+                "clear"
+              ]
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "failureCode",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "outcome",
+            "processInstanceId",
+            "requestTag",
+            "slotId"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "failureCode": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1
+            },
+            "kind": {
+              "const": "transportReceived"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "outcome": {
+              "enum": [
+                "success",
+                "failure"
+              ]
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestTag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "slotId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "kind",
+            "launchOrdinal",
+            "localSequence",
+            "processInstanceId",
+            "revision",
+            "view"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "uiPublishAck"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "localSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "view": {
+              "$ref": "#/$defs/view"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "controllerEvent": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "authMailboxPaused",
+            "kind",
+            "point",
+            "processInstanceId",
+            "sequence"
+          ],
+          "properties": {
+            "authMailboxPaused": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "bootstrapHookArrived"
+            },
+            "point": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "name",
+            "processInstanceId",
+            "sequence",
+            "serverSequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "checkpointPublished"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "serverSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "eventRef",
+            "kind",
+            "processInstanceId",
+            "sequence"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "eventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "kind": {
+              "const": "completionProcessedObserved"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "effectId",
+            "kind",
+            "mutationEventRef",
+            "originCommandRef",
+            "processInstanceId",
+            "readbackEventRef",
+            "sequence"
+          ],
+          "properties": {
+            "effectId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "detachedEffectAwaited"
+            },
+            "mutationEventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "originCommandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "readbackEventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "echoedRequestTag",
+            "kind",
+            "processInstanceId",
+            "requestTag",
+            "sequence",
+            "serverSequence"
+          ],
+          "properties": {
+            "echoedRequestTag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "wrongCorrelation"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestTag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "serverSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "processInstanceId",
+            "requestTag",
+            "sequence",
+            "serverSequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "disconnected"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestTag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "serverSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "pidAbsent",
+            "processInstanceId",
+            "sequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "forceStopped"
+            },
+            "pidAbsent": {
+              "type": "boolean"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "point",
+            "processInstanceId",
+            "sequence",
+            "target"
+          ],
+          "properties": {
+            "kind": {
+              "const": "hookArmed"
+            },
+            "point": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "target": {
+              "enum": [
+                "bootstrap",
+                "nextCommand",
+                "nextDelivery"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "point",
+            "processInstanceId",
+            "sequence"
+          ],
+          "properties": {
+            "authMailboxPaused": {
+              "type": "boolean"
+            },
+            "eventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "kind": {
+              "const": "hookArrived"
+            },
+            "point": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "eventRef",
+            "kind",
+            "point",
+            "processInstanceId",
+            "releaseChannel",
+            "sequence"
+          ],
+          "properties": {
+            "authMailboxPaused": {
+              "type": "boolean"
+            },
+            "bootstrapReceiptObserved": {
+              "type": "boolean"
+            },
+            "deliverReceiptObserved": {
+              "type": "boolean"
+            },
+            "eventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "kind": {
+              "const": "hookReleased"
+            },
+            "point": {
+              "type": "string",
+              "minLength": 1
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "releaseChannel": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "launchOrdinal",
+            "processInstanceId",
+            "sequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "launch"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "processInstanceId",
+            "sequence",
+            "stepId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "probeCaptured"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "stepId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "commandRef",
+            "eventRef",
+            "kind",
+            "processInstanceId",
+            "sequence"
+          ],
+          "properties": {
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "eventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "kind": {
+              "const": "receiptObserved"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "processInstanceId",
+            "requestTag",
+            "sequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "releaseAccepted"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestTag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "serverSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "processInstanceId",
+            "requestTag",
+            "sequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "releaseRequested"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestTag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "actionId",
+            "commandRef",
+            "kind",
+            "processInstanceId",
+            "sequence",
+            "sourceCommandRef",
+            "slotId"
+          ],
+          "properties": {
+            "actionId": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "commandRef": {
+              "$ref": "#/$defs/commandRef"
+            },
+            "kind": {
+              "const": "replayRequested"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "slotId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sourceCommandRef": {
+              "$ref": "#/$defs/commandRef"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "processInstanceId",
+            "requestTag",
+            "sequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "requestHeld"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestTag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "processInstanceId",
+            "requestTag",
+            "sequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "responseWritten"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requestTag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "serverSequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "launchOrdinal",
+            "processInstanceId",
+            "sequence"
+          ],
+          "properties": {
+            "kind": {
+              "const": "terminated"
+            },
+            "launchOrdinal": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "eventRef",
+            "kind",
+            "processInstanceId",
+            "sequence"
+          ],
+          "properties": {
+            "eventRef": {
+              "$ref": "#/$defs/eventRef"
+            },
+            "kind": {
+              "const": "processEndAcknowledged"
+            },
+            "processInstanceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9223372036854775807
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

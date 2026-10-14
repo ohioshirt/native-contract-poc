@@ -1,6 +1,11 @@
 ios/.build/
 android/.gradle/
 android/**/build/
+apps/android-demo/.gradle/
+apps/android-demo/build/
+apps/android-demo/app/build/
+apps/ios-demo/**/xcuserdata/
+apps/ios-demo/scripts/__pycache__/
 .gradle-home/
 .swift-cache/
 reports/

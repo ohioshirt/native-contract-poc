@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "historyVersion": 1,
+  "managedOracle": {
+    "specification": "../contract/specification.json",
+    "transitionFunction": "verification.async_contract.step",
+    "responseOwnerPolicy": "opaque-request-owner-must-match"
+  },
+  "domains": {
+    "managedStates": ["Unauthenticated", "Authenticated", "Refreshing"],
+    "storeKinds": ["Absent", "Present", "Unknown"],
+    "accounts": ["A", "B"],
+    "viewPhases": ["Booting", "SignedOut", "SigningOut", "SignedIn", "Refreshing", "FaultLocked"],
+    "receiptStatuses": ["Completed", "RejectedBusy", "IgnoredStale", "IgnoredForeign", "RejectedExhausted", "FaultLocked"],
+    "completionOutcomes": ["success", "failure"]
+  },
+  "bounds": {
+    "dequeuedCommands": 6,
+    "uiRevisions": 12,
+    "owners": 2,
+    "epochs": 3,
+    "requestIdsPerOwner": 2,
+    "queuedCommands": 2,
+    "currentSlots": 1,
+    "retainedOldSlots": 1,
+    "replaysPerSlot": 1
+  },
+  "invariants": [
+    {"id": "I1", "name": "SingleConsumer", "obligation": "At most one command executes; a later dequeue waits for terminal receipt or fault publication."},
+    {"id": "I2", "name": "CredentialAuthority", "obligation": "Credential replacement is caused only by admitted Login or an eligible current-slot success, after verification and before authenticated publication."},
+    {"id": "I3", "name": "NoResurrection", "obligation": "After successful Logout, old completions do not restore credentials or authenticated UI before a later committed Login."},
+    {"id": "I4", "name": "NewLoginIsolation", "obligation": "A revoked slot or prior command cannot change a later account's credential or auth projection."},
+    {"id": "I5", "name": "ClearBeforeReceipt", "obligation": "Completed Logout records Unauthenticated, no pending request, verified Absent storage and acknowledged SignedOut UI."},
+    {"id": "I6", "name": "PublishAuthority", "obligation": "Authenticated publication follows verified matching storage; per-process revisions increase and prior commands cannot publish after later receipts."},
+    {"id": "I7", "name": "AtMostOnce", "obligation": "Each slot commits at most once; stale, duplicate and foreign paths preserve the complete managed triple and auth projection."},
+    {"id": "I8", "name": "FaultClosed", "obligation": "Unknown storage or failed cleanup cannot produce successful Logout or authenticated publication."},
+    {"id": "I9", "name": "BootstrapClosed", "obligation": "A fresh process does not expose persisted credentials before verified bootstrap cleanup."}
+  ],
+  "classifications": ["PASS", "SEMANTIC_FAIL", "INVALID_HISTORY", "INFRA_FAILURE", "INCONCLUSIVE"]
+}
