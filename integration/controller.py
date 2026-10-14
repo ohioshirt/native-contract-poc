@@ -282,6 +282,13 @@ def _redact_log_line(line):
     return _SENSITIVE_TEXT.sub("<redacted>", line)
 
 
+# Diagnostic only: where an xcodebuild test run spends its time before the test body starts.
+_COMMAND_MILESTONES = {
+    "[Default] Running tests...": "test-runner-launched",
+    "Test Suite 'Selected tests' started": "tests-started",
+}
+
+
 def run_streaming_command(
     argv,
     *,
@@ -336,6 +343,7 @@ def run_streaming_command(
     ended_streams = set()
     timed_out = False
     parse_error = None
+    unseen_milestones = dict(_COMMAND_MILESTONES)
     deadline = started + timeout_seconds
     with stdout_path.open("w", encoding="utf-8") as stdout_log, stderr_path.open("w", encoding="utf-8") as stderr_log:
         logs = {"stdout": stdout_log, "stderr": stderr_log}
@@ -359,6 +367,11 @@ def run_streaming_command(
                 continue
             logs[label].write(_redact_log_line(line))
             logs[label].flush()
+            for marker, milestone in list(unseen_milestones.items()):
+                if marker in line:
+                    del unseen_milestones[marker]
+                    progress.event("command-milestone", step=step, milestone=milestone,
+                                   seconds=time.monotonic() - started)
             if label == "stdout" and status_parser is not None:
                 try:
                     status = status_parser(line)
@@ -489,6 +502,7 @@ class LoopbackRun:
     def start(self, *, timeout_seconds=60):
         if self.process_handle is not None:
             raise RuntimeError("refresh server was already started")
+        started = time.monotonic()
         argv = [
             sys.executable, "-m", "integration.server",
             "--bind", "127.0.0.1", "--port", "0", "--output", str(self.server_root),
@@ -538,6 +552,7 @@ class LoopbackRun:
                         raise ValueError("refresh server control capability is invalid")
                     self.run_id = created["runId"]
                     self._control_key = key
+                    progress.event("server-ready", scenario=self.scenario_id, seconds=time.monotonic() - started)
                     return ready
                 except Exception:
                     self.stop()
@@ -595,6 +610,7 @@ class LoopbackRun:
         if self._closed:
             return
         self._closed = True
+        started = time.monotonic()
         if self.run_id is not None and self._control_key is not None:
             try:
                 self._request("DELETE", f"/control/runs/{self.run_id}", authenticated=True)
@@ -608,6 +624,7 @@ class LoopbackRun:
             except subprocess.TimeoutExpired:
                 self.process_handle.kill()
                 self.process_handle.wait(timeout=timeout_seconds)
+        progress.event("server-stopped", scenario=self.scenario_id, seconds=time.monotonic() - started)
 
     def __enter__(self):
         self.start()
@@ -3029,6 +3046,8 @@ def _run_case(
                     process_events, native_relative, screenshots = _copy_ios_process_artifacts(
                         device, process_id, ordinal, scenario_id, case_root, command_runner=command_runner
                     )
+                    progress.event("launch-copy-end", scenario=scenario_id, variant=variant_id, launch=ordinal,
+                                   seconds=time.monotonic() - artifacts_started)
                     screenshot_directory = case_root / scenario_id / f"p{ordinal}" / "screenshots"
                     attachment_result = run_streaming_command(
                         xcresult_export_attachments_argv(
@@ -3092,6 +3111,7 @@ def _run_case(
             except (OSError, TimeoutError) as exc:
                 infra_detail = infra_detail or f"owned app cleanup failed for launch {ordinal}: {exc}"
 
+        server_evidence_started = time.monotonic()
         try:
             server_events, body_digests = run.events(timeout=min(5, _remaining_seconds(deadline)))
             append_server_controller_events(
@@ -3102,6 +3122,8 @@ def _run_case(
             )
         except (OSError, ValueError, RuntimeError) as exc:
             infra_detail = infra_detail or f"refresh server evidence capture failed: {exc}"
+        progress.event("case-server-evidence-end", scenario=scenario_id, variant=variant_id,
+                       seconds=time.monotonic() - server_evidence_started)
 
     if infra_detail:
         return {

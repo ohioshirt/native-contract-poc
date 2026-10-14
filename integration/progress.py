@@ -31,7 +31,7 @@ def event(kind, **fields):
     path = os.environ.get(ENVIRONMENT)
     if not path:
         return
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     try:
         parts = [stamp, kind] + [f"{key}={_format(value)}" for key, value in fields.items() if value is not None]
     except Exception:  # noqa: BLE001 - an unprintable value must not fail a stage

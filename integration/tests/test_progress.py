@@ -29,7 +29,7 @@ class ProgressLogTests(unittest.TestCase):
             lines = path.read_text().splitlines()
 
         self.assertEqual(len(lines), 2)
-        self.assertRegex(lines[0], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ case-end scenario=APP-01 ok=true detail=\"line one line two\"$")
+        self.assertRegex(lines[0], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z case-end scenario=APP-01 ok=true detail=\"line one line two\"$")
         self.assertTrue(lines[1].endswith(" case-start scenario=APP-02"))
 
     def test_event_never_raises_for_unencodable_values_or_unwritable_paths(self):
@@ -79,6 +79,74 @@ class ControllerProgressTests(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertRegex(lines[0], r" command-start step=APP-01/runner/p1 program=python")
         self.assertRegex(lines[1], r" command-end step=APP-01/runner/p1 exitCode=0 timedOut=false seconds=\d+\.\d$")
+
+    def test_xcodebuild_milestones_are_reported_once_each(self):
+        from integration import controller
+
+        script = (
+            "print('Command line invocation:')\n"
+            "print('2026-10-13 15:42:18.558280+0000 Runner[1:2] [Default] Running tests...')\n"
+            "print(\"Test Suite 'Selected tests' started at 2026-10-13 15:42:44.138.\")\n"
+            "print(\"Test Suite 'Selected tests' started at 2026-10-13 15:42:45.000.\")\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "progress.log"
+            with patch.dict(os.environ, {progress.ENVIRONMENT: str(log)}):
+                controller.run_streaming_command(
+                    [sys.executable, "-c", script],
+                    cwd=root,
+                    environment=dict(os.environ),
+                    output_directory=root / "ios" / "APP-01" / "runner" / "p1",
+                    timeout_seconds=30,
+                )
+            milestones = [line for line in log.read_text().splitlines() if " command-milestone " in line]
+
+        self.assertEqual(
+            [line.split(" milestone=")[1].split()[0] for line in milestones],
+            ["test-runner-launched", "tests-started"],
+        )
+        for line in milestones:
+            self.assertRegex(line, r" command-milestone step=APP-01/runner/p1 milestone=[a-z-]+ seconds=\d+\.\d$")
+
+    def test_commands_without_xcodebuild_markers_report_no_milestones(self):
+        from integration import controller
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "progress.log"
+            with patch.dict(os.environ, {progress.ENVIRONMENT: str(log)}):
+                controller.run_streaming_command(
+                    [sys.executable, "-c", "print('Running tests')"],
+                    cwd=root,
+                    environment=dict(os.environ),
+                    output_directory=root / "android" / "APP-01" / "runner",
+                    timeout_seconds=30,
+                )
+            kinds = [line.split()[1] for line in log.read_text().splitlines()]
+
+        self.assertEqual(kinds, ["command-start", "command-end"])
+
+    def test_refresh_server_reports_its_startup_and_shutdown_time(self):
+        from integration import controller
+
+        with tempfile.TemporaryDirectory(dir=ROOT / "reports" / "standalone") as directory:
+            log = Path(directory) / "progress.log"
+            with patch.dict(os.environ, {progress.ENVIRONMENT: str(log)}):
+                with controller.LoopbackRun(
+                    candidate=ROOT,
+                    output=Path(directory) / "case",
+                    platform="ios",
+                    scenario_id="APP-01",
+                    attempt_id="attempt-01",
+                ):
+                    pass
+            kinds = [line.split()[1] for line in log.read_text().splitlines()]
+            lines = log.read_text().splitlines()
+
+        self.assertEqual(kinds, ["server-ready", "server-stopped"])
+        self.assertRegex(lines[0], r" server-ready scenario=APP-01 seconds=\d+\.\d$")
+        self.assertRegex(lines[1], r" server-stopped scenario=APP-01 seconds=\d+\.\d$")
 
 
 class SkippedLedgerTests(unittest.TestCase):
