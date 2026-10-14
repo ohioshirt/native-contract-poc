@@ -294,6 +294,9 @@ def _recheck_platform_histories(platform_root, platform, stage, candidate):
             check_control_trace(contract, inventory_row, trace, server_row["events"], ui_case["observations"])
             if controls_stage else check_trace(contract, inventory_row, trace, server_row["events"], ui_case["observations"])
         )
+        # Saved reports are JSON: tuple projections become arrays on the wire.
+        # Compare the complete ordered report in that same representation.
+        checked_report = json.loads(protocol.encode(checked_report))
         if (
             case.get("classification") != checked_report["classification"]
             or case.get("violations") != checked_report["violations"]

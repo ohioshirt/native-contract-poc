@@ -239,12 +239,12 @@ class ShardAggregationTests(unittest.TestCase):
             with self.subTest(rows=rows, durations=durations), self.assertRaisesRegex(aggregate.AggregateError, 'budget'):
                 aggregate.verify_attempt_budgets(rows, durations, value)
 
-    def make_native_fixture(self, root):
+    def make_native_fixture(self, root, *, unsafe_success=False):
         root.mkdir()
-        trace, server, ui = make_app02_trace()
+        trace, server, ui = make_app02_trace(unsafe_success=unsafe_success)
         scenario = next(r for r in json.loads((ROOT / 'integration/scenarios.json').read_text())['scenarios'] if r['id'] == 'APP-02')
         verdict = check_trace(json.loads((ROOT / 'integration/contract.json').read_text()), scenario, trace, server, ui)
-        self.assertEqual(verdict['classification'], 'PASS')
+        self.assertEqual(verdict['classification'], 'SEMANTIC_FAIL' if unsafe_success else 'PASS')
         identity = {'scenarioId': 'APP-02', 'variantId': None}
         case = {**identity, **{field: verdict[field] for field in ('classification', 'violations', 'missingObservations')}}
         protocol.write_json(root / 'scenario-results.json', {'platform': 'ios', 'cases': [case]})
@@ -275,6 +275,22 @@ class ShardAggregationTests(unittest.TestCase):
             stage = copy.deepcopy(config()['stages']['candidate-ios'])
             stage['requiredScenarioIds'] = ['APP-02']
             with self.assertRaisesRegex(aggregate.AggregateError, 'identity or build binding'):
+                aggregate._recheck_platform_histories(root, 'ios', stage, ROOT)
+
+    def test_semantic_violation_replay_uses_exact_json_wire_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'ios'
+            self.make_native_fixture(root, unsafe_success=True)
+            stage = copy.deepcopy(config()['stages']['candidate-ios'])
+            stage['requiredScenarioIds'] = ['APP-02']
+            result = aggregate._recheck_platform_histories(root, 'ios', stage, ROOT)
+            self.assertEqual(result[0]['classification'], 'SEMANTIC_FAIL')
+            path = root / 'scenario-results.json'
+            recorded = json.loads(path.read_text())
+            violation = next(r for r in recorded['cases'][0]['violations'] if isinstance(r['actual'], list))
+            violation['actual'][1] = 'B'
+            protocol.write_json(path, recorded)
+            with self.assertRaisesRegex(aggregate.AggregateError, 'cannot be replayed'):
                 aggregate._recheck_platform_histories(root, 'ios', stage, ROOT)
 
 

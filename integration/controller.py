@@ -2583,7 +2583,19 @@ def _probe_ios_acceptance_runtime(candidate, command_runner, *, validation_scope
     scope = _toolchain_scope(candidate, validation_scope)
 
     def invoke(argv):
-        result = command_runner(argv, cwd=candidate, capture_output=True, text=True, timeout=30)
+        runtime_inventory = argv == ['xcrun', 'simctl', 'list', 'runtimes', '-j']
+        attempts = 3 if runtime_inventory else 1
+        timeout = 60 if runtime_inventory else 30
+        for attempt in range(attempts):
+            try:
+                result = command_runner(argv, cwd=candidate, capture_output=True, text=True, timeout=timeout)
+                break
+            except subprocess.TimeoutExpired:
+                commands.append({'argv': argv, 'exitCode': None, 'stdout': '',
+                                 'stderr': 'runtime inventory timed out', 'timedOut': True,
+                                 'timeoutSeconds': timeout})
+                if attempt == attempts - 1:
+                    raise
         commands.append({"argv": argv, "exitCode": result.returncode, "stdout": result.stdout, "stderr": result.stderr})
         if result.returncode != 0:
             raise OSError(f"iOS acceptance runtime command failed: {argv[0]}")

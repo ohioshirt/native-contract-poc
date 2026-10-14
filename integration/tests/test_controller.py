@@ -293,6 +293,47 @@ class PlatformControllerTests(unittest.TestCase):
 
 
 class ValidationScopeTests(unittest.TestCase):
+    def _runtime_probe(self, hangs, *, version='18.2', status=0):
+        timeouts = []
+
+        def runner(argv, **kwargs):
+            if argv == ['xcodebuild', '-version']:
+                return subprocess.CompletedProcess(argv, 0, stdout='Xcode 16.2\nBuild version 16C5032a\n', stderr='')
+            self.assertEqual(argv, ['xcrun', 'simctl', 'list', 'runtimes', '-j'])
+            timeouts.append(kwargs['timeout'])
+            if len(timeouts) <= hangs:
+                raise subprocess.TimeoutExpired(argv, kwargs['timeout'])
+            document = {'runtimes': [{'version': version, 'identifier': 'com.apple.CoreSimulator.SimRuntime.iOS-18-2', 'isAvailable': True}]}
+            return subprocess.CompletedProcess(argv, status, stdout=json.dumps(document), stderr='')
+
+        return runner, timeouts
+
+    def test_runtime_inventory_retries_a_timeout_and_retains_exact_runtime_check(self):
+        runner, timeouts = self._runtime_probe(1)
+        commands, runtime = controller._probe_ios_acceptance_runtime(ROOT, runner)
+        self.assertEqual(timeouts, [60, 60])
+        self.assertEqual(runtime['version'], '18.2')
+        self.assertTrue(commands[1]['timedOut'])
+        self.assertEqual(commands[-1]['exitCode'], 0)
+
+    def test_runtime_inventory_stops_after_three_timeouts(self):
+        runner, timeouts = self._runtime_probe(3)
+        with self.assertRaises(subprocess.TimeoutExpired):
+            controller._probe_ios_acceptance_runtime(ROOT, runner)
+        self.assertEqual(timeouts, [60, 60, 60])
+
+    def test_runtime_retry_never_accepts_a_different_runtime(self):
+        runner, timeouts = self._runtime_probe(1, version='18.3')
+        with self.assertRaisesRegex(ValueError, 'exact available iOS runtime'):
+            controller._probe_ios_acceptance_runtime(ROOT, runner)
+        self.assertEqual(timeouts, [60, 60])
+
+    def test_runtime_nonzero_exit_is_not_hidden_by_retries(self):
+        runner, timeouts = self._runtime_probe(0, status=1)
+        with self.assertRaises(OSError):
+            controller._probe_ios_acceptance_runtime(ROOT, runner)
+        self.assertEqual(timeouts, [60])
+
     def test_ci_runtime_rejects_local_tuple_while_explicit_local_probe_accepts_exact_tuple(self):
         def fake_runner(argv, **kwargs):
             if argv == ["xcodebuild", "-version"]:
