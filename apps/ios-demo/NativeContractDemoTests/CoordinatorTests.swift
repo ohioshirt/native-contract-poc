@@ -239,7 +239,7 @@ final class CoordinatorTests: XCTestCase {
             let view = try await harness.publisher.waitForCommand(4)
 
             XCTAssertEqual(view.phase, .faultLocked, testCase.fault)
-            let receipt = try XCTUnwrap(harness.audit.commandRows(kind: "commandReceipt", commandId: 4).first, testCase.fault)
+            let receipt = try await harness.audit.waitForRow(kind: "commandReceipt", commandId: 4, context: testCase.fault)
             XCTAssertEqual(receipt["status"] as? String, "FaultLocked", testCase.fault)
             XCTAssertEqual((receipt["observation"] as? [String: Any])?["store"] as? NSDictionary, storeRow("Absent"), testCase.fault)
             let storeRows = harness.audit.commandRows(kind: nil, commandId: 4).filter {
@@ -462,10 +462,9 @@ final class CoordinatorTests: XCTestCase {
         harness.transport.deliver(pending, outcome: .success(.demo(account: .a, version: 1)))
         let fault = try await harness.publisher.waitForCommand(4)
         XCTAssertEqual(fault.phase, .faultLocked)
-        XCTAssertEqual(harness.audit.eventRows.last(where: { $0["kind"] as? String == "commandReceipt" })?["status"] as? String, "FaultLocked")
-        let ownerBeforeCleanup = try XCTUnwrap(harness.audit.eventRows.last(where: {
-            $0["kind"] as? String == "commandReceipt"
-        })?["observation"] as? [String: Any])
+        let faultReceipt = try await harness.audit.waitForRow(kind: "commandReceipt", commandId: 4)
+        XCTAssertEqual(faultReceipt["status"] as? String, "FaultLocked")
+        let ownerBeforeCleanup = try XCTUnwrap(faultReceipt["observation"] as? [String: Any])
         let managedBeforeCleanup = try XCTUnwrap(ownerBeforeCleanup["managed"] as? [String: Any])
         XCTAssertEqual(managedBeforeCleanup["state"] as? String, "Authenticated")
 
@@ -1352,6 +1351,16 @@ private final class MemoryAuditRecorder: AuditRecorder, @unchecked Sendable {
                   let number = reference["id"] as? NSNumber else { return false }
             return number.int64Value == commandId
         }
+    }
+
+    /// The coordinator appends a command's receipt after publishing its final
+    /// view, so a test that waited for the view must also wait for the row.
+    func waitForRow(kind: String, commandId: Int64, context: String = "") async throws -> [String: Any] {
+        for _ in 0..<2000 {
+            if let row = commandRows(kind: kind, commandId: commandId).first { return row }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        throw TestFailure.timeout("\(kind) for command \(commandId) was not recorded \(context)")
     }
 
     func hookRows(point: HookPoint) -> [[String: Any]] {
